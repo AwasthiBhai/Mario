@@ -1,4 +1,4 @@
-/* STARLIT PIP — UI: navigation, menus, HUD, level select, settings, reviews, overlays.
+/* STARBOUND — UI: navigation, menus, HUD, level select, settings, reviews, overlays.
    NOTE: show('game') <-> openMenu() must NEVER call each other recursively
    (that cycle caused a stack overflow that made PLAY do nothing). */
 (function(global){
@@ -8,7 +8,8 @@
     view:'home', currentLevel:1, carryScore:0, paused:false, inGame:false, completeRes:null,
     suspended:false, reviewRating:0,
     init(){
-      this.bindNav(); this.bindActions(); this.bindSettings(); this.bindReviews();
+      try{ if(global.SP_Theme&&SP_Theme.init) SP_Theme.init(); }catch(e){}
+      this.bindNav(); this.bindActions(); this.bindSettings(); this.bindReviews(); this.bindTheme();
       this.renderWorldsHome(); this.renderLevelSelect(); this.refreshHero(); this.applySettingsToDom(); this.renderReviews();
       window.addEventListener('resize',()=>this.fitTouch());
       window.addEventListener('orientationchange',()=>{ this.fitTouch(); if(global.SP_Engine&&SP_Engine.fitCanvas) SP_Engine.fitCanvas(); });
@@ -33,6 +34,30 @@
       document.addEventListener('pointerdown',()=>SP_Audio.resume(),{once:true});
       // small screens start with side panels collapsed (game first); user can expand
       if(window.matchMedia&&window.matchMedia('(max-width: 768px)').matches){ $$('.game-side details').forEach(d=>{ d.open=false; }); }
+    },
+    bindTheme(){
+      // Header / mobile icon toggles flip Light <-> Dark.
+      $$('[data-theme-toggle]').forEach(b=>{
+        if(b._themeBound) return; b._themeBound=true;
+        b.addEventListener('click',e=>{
+          e.preventDefault(); e.stopPropagation();
+          try{ SP_Audio.init(SP_Save.data.settings); SP_Audio.resume(); }catch(err){}
+          try{ SP_Theme.toggle(); }catch(err){}
+          try{
+            var manual=SP_Theme.get();
+            if(global.localStorage) global.localStorage.setItem(SP_Theme.KEY,manual);
+          }catch(err){}
+        });
+      });
+      // Settings segmented control sets an explicit choice (persisted).
+      $$('[data-theme-option]').forEach(b=>{
+        if(b._themeBound) return; b._themeBound=true;
+        b.addEventListener('click',()=>{
+          try{ SP_Audio.init(SP_Save.data.settings); SP_Audio.resume(); }catch(err){}
+          try{ SP_Theme.set(b.getAttribute('data-theme-option')); }catch(err){}
+        });
+      });
+      try{ if(global.SP_Theme&&SP_Theme.syncControls) SP_Theme.syncControls(); }catch(e){}
     },
     onKeyDown(code){
       if(code==='Escape'||code==='KeyP'){

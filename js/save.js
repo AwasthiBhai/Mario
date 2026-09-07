@@ -1,4 +1,4 @@
-/* STARLIT PIP — SaveSystem (localStorage, corruption-safe) */
+/* STARBOUND — SaveSystem (localStorage, corruption-safe) */
 (function(global){
   'use strict';
   const KEY='starlitPipSaveV1';

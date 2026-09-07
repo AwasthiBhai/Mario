@@ -1,4 +1,4 @@
-/* STARLIT PIP — AudioManager: 100% original generative WebAudio. No external assets.
+/* STARBOUND — AudioManager: 100% original generative WebAudio. No external assets.
    Centralized audio STATE MANAGER. Website screens are SILENT; music plays
    only during active gameplay states (level / boss / ending / jingles). */
 (function(global){

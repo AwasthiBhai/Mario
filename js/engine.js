@@ -1,4 +1,4 @@
-/* STARLIT PIP — Engine: physics, camera, entities, bosses, particles, rendering */
+/* STARBOUND — Engine: physics, camera, entities, bosses, particles, rendering */
 (function(global){
   'use strict';
   const TILE=32, VIEW_W=960, VIEW_H=540, GRAV=2400;

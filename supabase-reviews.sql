@@ -1,4 +1,4 @@
--- STARLIT PIP — Reviews: Supabase upgrade path (optional, recommended long-term).
+-- STARBOUND — Reviews: Supabase upgrade path (optional, recommended long-term).
 -- ---------------------------------------------------------------------------
 -- The game reads/writes global reviews through Supabase automatically as soon
 -- as a Project URL + anon key are set in `js/reviews-config.js`.

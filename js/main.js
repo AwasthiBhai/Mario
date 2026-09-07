@@ -1,4 +1,4 @@
-/* STARLIT PIP — boot */
+/* STARBOUND — boot */
 (function(){
   'use strict';
   window.addEventListener('DOMContentLoaded',()=>{

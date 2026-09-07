@@ -1,4 +1,4 @@
-/* STARLIT PIP — Worlds + deterministic 50-level builder (data-driven, no hardcoded maps) */
+/* STARBOUND — Worlds + deterministic 50-level builder (data-driven, no hardcoded maps) */
 (function(global){
   'use strict';
   const WORLDS=[

@@ -1,4 +1,4 @@
-/* STARLIT PIP — Reviews: GLOBAL shared backend, zero secrets.
+/* STARBOUND — Reviews: GLOBAL shared backend, zero secrets.
    ---------------------------------------------------------------------------
    SINGLE SOURCE OF TRUTH: one shared backend document —
      {BACKEND_BASE}/{BACKEND_NAMESPACE}/{BACKEND_ENTRY}  →  {"reviews":[...]}

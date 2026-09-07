@@ -1,4 +1,4 @@
-/* STARLIT PIP — Cinematic studio intro (multi-phase).
+/* STARBOUND — Cinematic studio intro (multi-phase).
    PHASES: 0 atmosphere → 1 light reveal → 2 studio title → 3 hold →
    4 disappear → 5 world reveal → 6 logo reveal → 7 logo hold → 8 transition.
    Website stays silent except intro's own cinematic audio; skipping or

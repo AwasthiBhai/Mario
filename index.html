@@ -3,16 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>STARLIT PIP — Echoes of the Aether | BundLal Studios</title>
-<meta name="description" content="STARLIT PIP: a 50-level 2D platform adventure by BundLal Studios. Leap between 10 worlds, rekindle the stars.">
-<meta name="theme-color" content="#0B1026">
+<script>
+/* STARBOUND — apply stored/system theme before paint (no flash). */
+(function(){try{var k='starboundThemeV1';var m=null;try{m=localStorage.getItem(k);}catch(e){}if(m!=='light'&&m!=='dark'){try{m=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}catch(e){m='dark';}if(!m)m='dark';}document.documentElement.setAttribute('data-theme',m);}catch(e){try{document.documentElement.setAttribute('data-theme','dark');}catch(_){}}})();
+</script>
+<title>STARBOUND — BundLal Studios</title>
+<meta name="description" content="STARBOUND by BundLal Studios — a 50-level 2D platform adventure. Light every beacon. Reclaim the sky.">
+<meta name="theme-color" content="#000000">
 <meta property="og:type" content="website">
-<meta property="og:title" content="STARLIT PIP — Echoes of the Aether">
-<meta property="og:description" content="A 50-level 2D platform adventure by BundLal Studios. Play Pip the lantern-fox: 10 worlds, 10 bosses, original generative music. Free in your browser.">
+<meta property="og:title" content="STARBOUND — BundLal Studios">
+<meta property="og:description" content="STARBOUND: a 50-level 2D platform adventure by BundLal Studios. Light every beacon. Reclaim the sky. Free in your browser.">
 <meta property="og:image" content="favicon.svg">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="STARLIT PIP — Echoes of the Aether">
-<meta name="twitter:description" content="50 levels · 10 worlds · 10 bosses. A complete browser platformer by BundLal Studios.">
+<meta name="twitter:title" content="STARBOUND — BundLal Studios">
+<meta name="twitter:description" content="50 levels · 10 worlds · 10 bosses. STARBOUND, an original browser platformer by BundLal Studios.">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -27,20 +31,25 @@
   <div class="intro-center">
     <div id="introStudio" class="intro-studio">BundLal Studios <span>Presents</span></div>
     <div id="introLogo" class="intro-logo hidden">
-      <svg viewBox="0 0 640 220" class="logo-svg-lg" aria-label="Starlit Pip logo">
+      <svg viewBox="0 0 640 220" class="starbound-logo" role="img" aria-label="Starbound logo">
         <defs>
           <linearGradient id="lgGold" x1="0" y1="0" x2="1" y2="1">
             <stop offset="0" stop-color="#FFE9A8"/><stop offset=".5" stop-color="#FFC94D"/><stop offset="1" stop-color="#FF8A3D"/>
+          </linearGradient>
+          <linearGradient id="sbOrbit" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#FFC94D" stop-opacity="0"/><stop offset=".5" stop-color="#FFC94D"/><stop offset="1" stop-color="#FFC94D" stop-opacity="0"/>
           </linearGradient>
           <filter id="lgGlow" x="-40%" y="-40%" width="180%" height="180%">
             <feGaussianBlur stdDeviation="10" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
           </filter>
         </defs>
         <g filter="url(#lgGlow)">
+          <ellipse cx="320" cy="52" rx="72" ry="20" fill="none" stroke="url(#sbOrbit)" stroke-width="3"/>
           <path d="M320 18 L332 52 L368 52 L339 73 L350 108 L320 86 L290 108 L301 73 L272 52 L308 52 Z" fill="url(#lgGold)"/>
+          <circle cx="388" cy="44" r="5" fill="#FFF7E0"/>
         </g>
-        <text x="320" y="155" text-anchor="middle" font-family="Baloo 2, Nunito, sans-serif" font-weight="800" font-size="72" fill="#FFF7E0" letter-spacing="2" style="paint-order:stroke" stroke="#3A2400" stroke-width="8">STARLIT PIP</text>
-        <text x="320" y="188" text-anchor="middle" font-family="Nunito, sans-serif" font-weight="700" font-size="20" fill="#FFD97A" letter-spacing="6">ECHOES OF THE AETHER</text>
+        <text x="320" y="158" text-anchor="middle" font-family="Baloo 2, Nunito, sans-serif" font-weight="800" font-size="76" fill="#FFFFFF" letter-spacing="8" style="paint-order:stroke" stroke="#000000" stroke-width="10">STARBOUND</text>
+        <text x="320" y="190" text-anchor="middle" font-family="Nunito, sans-serif" font-weight="700" font-size="17" fill="#FFD97A" letter-spacing="4">LIGHT EVERY BEACON · RECLAIM THE SKY</text>
       </svg>
     </div>
     <div id="introClick" class="intro-click hidden">
@@ -57,7 +66,7 @@
 <!-- ============ LOADING ============ -->
 <div id="loader" class="loader hidden">
   <div class="loader-card">
-    <div class="loader-logo">✦ STARLIT PIP ✦</div>
+    <div class="loader-logo">✦ STARBOUND ✦</div>
     <div class="loader-bar"><div id="loaderFill" class="loader-fill"></div></div>
     <p id="loaderTip" class="loader-tip">Tip: Hold SHIFT to run farther and jump higher.</p>
   </div>
@@ -66,10 +75,10 @@
 <!-- ============ SITE HEADER ============ -->
 <header id="siteHeader" class="site-header">
   <a class="brand" href="#home" data-nav="home">
-    <span class="brand-badge" aria-hidden="true">
-      <svg viewBox="0 0 48 48" class="brand-svg"><circle cx="24" cy="24" r="21" fill="#141B3D" stroke="#FFC94D" stroke-width="2.5"/><path d="M24 8 L27 18 L38 18 L29 24 L32 35 L24 28 L16 35 L19 24 L10 18 L21 18 Z" fill="#FFC94D"/><circle cx="24" cy="24" r="4" fill="#fff7e0"/></svg>
+    <span class="brand-badge-star" aria-hidden="true">
+      <svg viewBox="0 0 48 48"><ellipse cx="24" cy="22" rx="17" ry="7" fill="none" stroke="#FFC94D" stroke-width="2" opacity=".9"/><path d="M24 8 L27 18 L38 18 L29 24 L32 35 L24 28 L16 35 L19 24 L10 18 L21 18 Z" fill="#FFC94D"/><circle cx="38" cy="15" r="2.4" fill="#FFF7E0"/></svg>
     </span>
-    <span class="brand-text"><strong>STARLIT PIP</strong><em>BundLal Studios</em></span>
+    <span class="brand-text"><strong>STARBOUND</strong><em class="brand-tagline">BUNDLAL STUDIOS</em></span>
   </a>
   <nav class="site-nav" aria-label="Main">
     <button data-nav="home" class="nav-link active">Home</button>
@@ -82,6 +91,7 @@
     <button data-nav="about" class="nav-link">About</button>
   </nav>
   <div class="header-actions">
+    <button id="hdrTheme" class="icon-btn theme-btn-compact" data-theme-toggle title="Switch to light mode" aria-label="Switch to light mode" aria-pressed="true"><span class="theme-ico" aria-hidden="true">☀</span></button>
     <button id="hdrMute" class="icon-btn" title="Mute">🔊</button>
     <button id="hdrMenuBtn" class="icon-btn only-mobile" title="Menu">☰</button>
     <button class="btn btn-gold btn-sm" data-nav="game" id="hdrPlay">▶ Play</button>
@@ -92,6 +102,7 @@
   <button data-nav="levels">Levels</button><button data-nav="reviews">Reviews</button><button data-nav="howto">How to Play</button>
   <button data-nav="settings">Settings</button><button data-nav="credits">Credits</button>
   <button data-nav="about">About</button>
+  <button data-theme-toggle class="theme-menu-item"><span class="theme-ico" aria-hidden="true">☀</span> <span>Theme: Dark / Light</span></button>
 </div>
 
 <main id="app">
@@ -102,8 +113,9 @@
     <div class="hero-inner">
       <div class="hero-copy">
         <div class="eyebrow">✦ BundLal Studios presents ✦</div>
-        <h1 class="hero-title"><span class="t1">STARLIT</span> <span class="t2">PIP</span></h1>
-        <p class="hero-sub">Echoes of the Aether — a 50-level platform adventure across 10 handcrafted worlds.</p>
+        <h1 class="hero-title-starbound">STARBOUND</h1>
+        <p class="hero-tagline">Light every beacon. Reclaim the sky.</p>
+        <p class="hero-sub">A 50-level platform adventure across 10 handcrafted worlds.</p>
         <p class="hero-desc">Play <strong>Pip</strong>, a lantern-fox cub. Run, bounce, outwit 7 critter species, dodge hazards, find secret relics, topple 10 bosses — and face the <strong>Voidstar</strong> in Level 50.</p>
         <div class="hero-cta">
           <button class="btn btn-gold btn-lg" data-action="play">▶ Play Now</button>
@@ -179,7 +191,7 @@
     </div>
     <div class="card glow">
       <h3>About the game</h3>
-      <p><strong>STARLIT PIP: Echoes of the Aether</strong> is a complete browser platformer built with canvas, vanilla JS modules and generative audio. No downloads, no accounts — your progress stays on this device.</p>
+      <p><strong>STARBOUND</strong> is a complete browser platformer built with canvas, vanilla JS modules and generative audio. No downloads, no accounts — your progress stays on this device.</p>
       <h3>Studio</h3>
       <p><strong>BundLal Studios</strong> — small team, big skies. We make cozy-but-challenging adventures with original art, music and code.</p>
       <button class="btn btn-gold btn-sm" data-nav="about">More about →</button>
@@ -222,7 +234,8 @@
         <!-- overlays -->
         <div id="menuOverlay" class="overlay">
           <div class="panel menu-panel">
-            <div class="mini-logo">✦ STARLIT PIP ✦</div>
+            <div class="mini-logo">✦ STARBOUND ✦</div>
+            <div class="muted"><small>Light every beacon. Reclaim the sky.</small></div>
             <h2>Main Menu</h2>
             <button class="btn btn-gold btn-block" data-action="play">▶ &nbsp;PLAY</button>
             <button class="btn btn-ghost btn-block" data-action="continue">CONTINUE</button>
@@ -351,6 +364,14 @@
   <div class="wrap narrow">
     <h2>Settings</h2>
     <div class="card">
+      <h3>Appearance</h3>
+      <p class="muted"><small>Light or true-black dark. Your choice is remembered on this device.</small></p>
+      <div class="theme-seg" role="group" aria-label="Color theme">
+        <button type="button" data-theme-option="light">☀ Light</button>
+        <button type="button" data-theme-option="dark">🌙 Dark</button>
+      </div>
+    </div>
+    <div class="card">
       <h3>Audio</h3>
       <label class="slider-row">Master volume <input id="setMaster" type="range" min="0" max="100" value="80"><b id="setMasterV">80</b></label>
       <label class="slider-row">Music <input id="setMusic" type="range" min="0" max="100" value="70"><b id="setMusicV">70</b></label>
@@ -381,7 +402,7 @@
 <section id="view-credits" class="view">
   <div class="wrap narrow credits-roll">
     <h2>✦ Credits ✦</h2>
-    <div class="card center studio-banner"><div class="mini-logo">✦ STARLIT PIP ✦</div><p><strong>Echoes of the Aether</strong><br><span class="muted">A BundLal Studios original</span></p>
+    <div class="card center studio-banner"><div class="mini-logo">✦ STARBOUND ✦</div><p><strong>Light every beacon. Reclaim the sky.</strong><br><span class="muted">A BundLal Studios original</span></p>
       <div class="studio-name">BUNDLAL STUDIOS</div>
       <p class="muted"><small>Small team · Big skies</small></p>
     </div>
@@ -414,7 +435,7 @@
   <div class="wrap narrow">
     <h2>About</h2>
     <div class="card"><h3>The story</h3><p>When the <strong>Voidstar</strong> devoured the sky-lanterns, the worlds of the Aether went dim. <strong>Pip</strong>, last lantern-fox of Ember Meadow, lit one stubborn ember and set out to rekindle <strong>50 beacons</strong> across <strong>10 worlds</strong> — from Dewdrop Caverns to the Starfall Citadel.</p></div>
-    <div class="card"><h3>BundLal Studios</h3><p><strong>BundLal Studios</strong> is an indie micro-studio crafting cozy-but-challenging browser adventures. <em>Starlit Pip</em> is our love letter to classic platformers — rebuilt from scratch with original characters, generative music, and a full 50-level arc.</p></div>
+    <div class="card"><h3>BundLal Studios</h3><p><strong>BundLal Studios</strong> is an indie micro-studio crafting cozy-but-challenging browser adventures. <em>STARBOUND</em> is our love letter to classic platformers — rebuilt from scratch with original characters, generative music, and a full 50-level arc.</p></div>
     <div class="card"><h3>Details</h3><p class="muted">50 levels · 10 bosses · 7 enemy species · 5 power-ups · secrets & relics · best scores/times · keyboard + touch + gamepad · offline-friendly single file deploy.</p></div>
   </div>
 </section>
@@ -424,12 +445,13 @@
 
 <footer class="footer">
   <div class="wrap foot-grid">
-    <div><strong>✦ STARLIT PIP</strong><br><span class="muted">Echoes of the Aether · © 2026 BundLal Studios. All original content.</span></div>
+    <div><strong>✦ STARBOUND</strong><br><span class="muted">Light every beacon. Reclaim the sky. · © 2026 BundLal Studios. All original content.</span></div>
     <div class="foot-links"><button data-nav="game">Play</button><button data-nav="levels">Levels</button><button data-nav="reviews">Reviews</button><button data-nav="howto">Guide</button><button data-nav="settings">Settings</button><button data-nav="credits">Credits</button></div>
   </div>
 </footer>
 
 <script src="js/audio.js"></script>
+<script src="js/theme.js"></script>
 <script src="js/save.js"></script>
 <script src="js/reviews-config.js"></script>
 <script src="js/reviews.js"></script>

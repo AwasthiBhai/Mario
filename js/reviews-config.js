@@ -1,4 +1,4 @@
-/* STARLIT PIP — Reviews backend configuration.
+/* STARBOUND — Reviews backend configuration.
    ---------------------------------------------------------------------------
    SECURITY: this file ships to every browser and contains ZERO secrets.
    No credential of any kind exists anywhere in this design.

@@ -1,18 +1,44 @@
-:root {
-  --bg: #0B1026;
-  --bg2: #141B3D;
-  --panel: #18204A;
-  --card: #1B2452;
+/* ============================================================
+   STARBOUND — THEME SYSTEM (Light / True-Black Dark)
+   Dark is TRUE BLACK + neutral grays only. No violet/purple/blue.
+   All UI reads from these variables. Gameplay canvas is untouched.
+   ============================================================ */
+:root,
+[data-theme="dark"] {
+  --bg-primary: #000000;
+  --bg-surface: #0B0B0B;
+  --bg-elevated: #111111;
+  --bg-raised: #171717;
+  --bg-secondary: #101010;
+  --bg-inset: #000000;
+  --text-primary: #FFFFFF;
+  --text-secondary: #B8B8B8;
+  --text-muted: #858585;
+  --border: #2A2A2A;
+  --border-strong: #3A3A3A;
+  --header-bg: rgba(0, 0, 0, .88);
+  --nav-hover: #1C1C1C;
+  --input-bg: #0B0B0B;
+  --chip-bg: #141414;
+  --hero-bg: #000000;
+  --hero-copy: #EDEDED;
+  --hero-desc: #B8B8B8;
+  --shadow: 0 12px 40px rgba(0, 0, 0, .6);
+  color-scheme: dark;
+  /* legacy aliases (kept so older rules stay theme-aware) */
+  --bg: var(--bg-primary);
+  --bg2: var(--bg-surface);
+  --panel: var(--bg-surface);
+  --card: var(--bg-elevated);
+  --cream: var(--text-primary);
+  --muted: var(--text-secondary);
   --gold: #FFC94D;
   --gold2: #FF8A3D;
-  --cream: #FFF7E0;
-  --muted: #9AA3C7;
   --mint: #5DF2C8;
   --sky: #4DA6FF;
   --coral: #FF6B6B;
   --purple: #B388FF;
   --radius: 18px;
-  --shadow: 0 12px 40px rgba(0, 0, 0, .45);
   --font-d: 'Baloo 2', system-ui, sans-serif;
   --font-b: 'Nunito', system-ui, sans-serif;
   /* ---- responsive system ---- */
@@ -33,6 +59,35 @@
   --sar: env(safe-area-inset-right, 0px);
 }
 
+[data-theme="light"] {
+  --bg-primary: #F7F7F5;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #FFFFFF;
+  --bg-raised: #FFFFFF;
+  --bg-secondary: #F1F1EE;
+  --bg-inset: #EFEFEC;
+  --text-primary: #111111;
+  --text-secondary: #5F5F5F;
+  --text-muted: #888888;
+  --border: #DADADA;
+  --border-strong: #C2C2C2;
+  --header-bg: rgba(255, 255, 255, .9);
+  --nav-hover: #EFEFEC;
+  --input-bg: #FFFFFF;
+  --chip-bg: #F1F1EE;
+  --hero-bg: #FFFFFF;
+  --hero-copy: #111111;
+  --hero-desc: #5F5F5F;
+  --shadow: 0 12px 32px rgba(0, 0, 0, .10);
+  color-scheme: light;
+  --bg: var(--bg-primary);
+  --bg2: var(--bg-surface);
+  --panel: var(--bg-surface);
+  --card: var(--bg-elevated);
+  --cream: var(--text-primary);
+  --muted: var(--text-secondary);
+}
+
 * {
   box-sizing: border-box
 }
@@ -44,13 +99,27 @@ html {
 
 body {
   margin: 0;
-  background: radial-gradient(1200px 600px at 80% -10%, #232c66 0%, var(--bg) 55%) fixed, var(--bg);
-  color: var(--cream);
+  background: var(--bg-primary);
+  color: var(--text-primary);
   font-family: var(--font-b);
   font-size: var(--body-fs);
   min-height: 100vh;
   min-height: 100dvh;
-  overflow-x: clip
+  overflow-x: clip;
+  transition: background-color .2s ease, color .2s ease;
+}
+
+/* Subtle UI-only theme transitions (gameplay canvas/objects excluded) */
+.site-header, .mobile-nav, .card, .panel, .world-block, .level-card,
+.game-shell, .footer, .btn, .icon-btn, .nav-link, .loader-card,
+.rev-status, .controls-table div, .stat-grid div, .hero-stats div,
+.chips span, kbd, .dist-bar, .rev-label input, .rev-label textarea,
+.star-pick button, .toast, .keymap button {
+  transition: background-color .2s ease, color .2s ease, border-color .2s ease, box-shadow .2s ease;
+}
+
+#game, #game *, .touch button, .pip-fox, .pip-hero, .hero-coins i {
+  transition: none !important;
 }
 
 img,
@@ -2483,4 +2552,269 @@ body.show-touch .canvas-wrap:fullscreen .touch {
   .t-right {
     align-items: center
   }
+}
+
+/* ============================================================
+   STARBOUND — THEME OVERRIDES (cascade wins over legacy hex)
+   True-black dark + clean light. Gameplay canvas untouched.
+   ============================================================ */
+
+/* ---------- shared: use variables instead of legacy hex ---------- */
+.site-header {
+  background: var(--header-bg);
+  border-bottom-color: var(--border);
+}
+.brand { color: var(--text-primary); }
+.nav-link { color: var(--text-secondary); }
+.nav-link:hover { background: var(--nav-hover); color: var(--text-primary); }
+.mobile-nav { background: var(--bg-surface); border-bottom-color: var(--border); }
+.mobile-nav button {
+  background: var(--bg-secondary);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+.card {
+  background: var(--bg-elevated);
+  border-color: var(--border);
+  box-shadow: var(--shadow);
+}
+.world-block, .game-shell {
+  background: var(--bg-surface);
+  border-color: var(--border);
+  box-shadow: var(--shadow);
+}
+.level-card {
+  background: var(--bg-secondary);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+.level-card .meta { color: var(--text-secondary); }
+.level-card:hover:not(:disabled) { border-color: var(--gold); }
+.controls-table div {
+  background: var(--bg-secondary);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+.controls-table span { color: var(--text-secondary); }
+kbd {
+  background: var(--bg-inset);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+.footer { background: var(--bg-surface); border-top-color: var(--border); }
+.foot-links button { color: var(--text-secondary); }
+.loader { background: rgba(0, 0, 0, .72); }
+[data-theme="light"] .loader { background: rgba(247, 247, 245, .82); }
+.loader-card { background: var(--bg-surface); border-color: var(--border); }
+.rev-status { background: var(--bg-secondary); border-color: var(--border); color: var(--text-secondary); }
+.rev-label input, .rev-label textarea {
+  background: var(--input-bg);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+.star-pick button { background: var(--bg-secondary); border-color: var(--border-strong); }
+.dist-bar { background: var(--bg-secondary); border-color: var(--border); }
+.stat-grid div {
+  background: var(--bg-secondary);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+.stat-grid span { color: var(--text-secondary); }
+.panel {
+  background: var(--bg-surface);
+  border-color: var(--gold);
+}
+.overlay { background: rgba(0, 0, 0, .72); }
+[data-theme="light"] .overlay { background: rgba(17, 17, 17, .45); }
+.toast {
+  background: var(--bg-raised);
+  border-color: var(--gold);
+  color: var(--text-primary);
+}
+.keymap button {
+  background: var(--bg-secondary);
+  color: var(--gold);
+  border-color: var(--gold);
+}
+.btn-ghost {
+  background: var(--bg-secondary);
+  border: 0;
+  box-shadow: inset 0 0 0 2px var(--border-strong);
+  color: var(--text-primary);
+}
+.btn-ghost:hover { filter: brightness(1.04); }
+.icon-btn {
+  background: var(--bg-secondary);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+.hero-stats div {
+  background: var(--bg-surface);
+  border-color: var(--border);
+}
+.hero-stats span { color: var(--text-secondary); }
+.chips span {
+  background: var(--bg-secondary);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+.pip-showcase {
+  background: var(--bg-surface);
+  border-color: var(--border);
+}
+.ticks { color: var(--text-secondary); }
+.muted { color: var(--text-secondary) !important; }
+h2 small { color: var(--text-muted); }
+.ending-text { color: var(--text-primary); }
+.rev-legacy-row { border-top-color: var(--border); }
+.creator-role { color: var(--text-secondary); }
+
+/* touch bars follow theme (gameplay buttons themselves unchanged) */
+body.show-touch .touch,
+body.show-touch .canvas-wrap:fullscreen .touch {
+  background: var(--bg-surface);
+  border-top-color: var(--border);
+}
+@media (max-width: 600px) and (orientation: portrait) {
+  body.show-touch .touch { background: var(--bg-surface); border-top-color: var(--border); }
+}
+@media (max-width: 900px) and (orientation: landscape) {
+  body.show-touch .touch { background: var(--bg-surface); border-top-color: var(--border); }
+}
+
+/* ---------- DARK: true black, cinematic, minimal ---------- */
+[data-theme="dark"] .hero {
+  background: #000000;
+}
+[data-theme="dark"] #heroCanvas { opacity: .55; }
+[data-theme="dark"] .hero-sub { color: var(--text-primary); }
+[data-theme="dark"] .hero-desc { color: var(--hero-desc); }
+[data-theme="dark"] .hero-title .t1 {
+  color: #FFFFFF;
+  text-shadow: 0 4px 0 #000, 0 0 44px rgba(255, 201, 77, .35);
+}
+[data-theme="dark"] .hero-wave { background: #000000; }
+[data-theme="dark"] .eyebrow { color: var(--gold); }
+[data-theme="dark"] .level-card.boss {
+  border-color: var(--coral);
+  background: #1A0E0E;
+}
+[data-theme="dark"] .creator-card {
+  background: var(--bg-elevated);
+  border-color: var(--gold);
+}
+[data-theme="dark"] .card.glow { box-shadow: 0 0 26px rgba(255, 201, 77, .16), var(--shadow); }
+
+/* ---------- LIGHT: clean, bright, premium ---------- */
+[data-theme="light"] .hero {
+  background: linear-gradient(180deg, #FFFFFF 0%, #F7F7F5 70%, #F7F7F5 100%);
+}
+[data-theme="light"] #heroCanvas { opacity: .28; }
+[data-theme="light"] .hero-sub { color: var(--hero-copy); }
+[data-theme="light"] .hero-desc { color: var(--hero-desc); }
+[data-theme="light"] .hero-title .t1 {
+  color: #111111;
+  text-shadow: none;
+}
+[data-theme="light"] .hero-title .t2 { filter: drop-shadow(0 2px 0 rgba(58, 36, 0, .25)); }
+[data-theme="light"] .hero-wave { background: var(--bg-primary); }
+[data-theme="light"] .eyebrow { color: #9A6200; }
+[data-theme="light"] .hero-stats div { box-shadow: var(--shadow); }
+[data-theme="light"] .card { box-shadow: var(--shadow); }
+[data-theme="light"] .btn-ghost { background: #FFFFFF; }
+[data-theme="light"] .btn-ghost:hover { background: #F1F1EE; }
+[data-theme="light"] .level-card.boss { background: #FFF1F1; }
+[data-theme="light"] .creator-card { background: #FFFFFF; }
+[data-theme="light"] .icon-btn { background: #FFFFFF; }
+[data-theme="light"] .nav-link.active { color: #2A1A00; }
+
+/* ---------- STARBOUND brand + theme switcher ---------- */
+.starbound-logo {
+  width: min(620px, 86vw);
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+.brand-badge-star {
+  width: clamp(30px, 8vw, 40px);
+  height: clamp(30px, 8vw, 40px);
+  border-radius: 12px;
+  background: #000000;
+  border: 2px solid var(--gold);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+[data-theme="light"] .brand-badge-star { background: #111111; }
+.brand-badge-star svg { width: 72%; height: 72%; }
+.brand-tagline {
+  font-size: .72rem;
+  letter-spacing: 1.6px;
+  color: var(--gold);
+  font-weight: 700;
+}
+[data-theme="light"] .brand-tagline { color: #9A6200; }
+.hero-brand-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  letter-spacing: 3px;
+  font-size: .82rem;
+  color: var(--text-secondary);
+}
+.hero-title-starbound {
+  font-family: var(--font-d);
+  font-weight: 800;
+  font-size: clamp(2.6rem, 9vw + 1rem, 5.4rem);
+  line-height: .95;
+  letter-spacing: clamp(2px, 1vw, 8px);
+  margin: .12em 0;
+  color: var(--text-primary);
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.hero-title-starbound .amp-star { color: var(--gold); }
+[data-theme="light"] .hero-title-starbound .amp-star { color: #C07E00; }
+.hero-tagline {
+  font-size: clamp(1rem, 2.6vw + .5rem, 1.25rem);
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: .2em 0;
+}
+.theme-seg {
+  display: inline-flex;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 4px;
+  gap: 4px;
+}
+.theme-seg button {
+  border: 0;
+  border-radius: 999px;
+  padding: 9px 16px;
+  font-family: inherit;
+  font-weight: 800;
+  font-size: .88rem;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-secondary);
+  min-height: 40px;
+}
+.theme-seg button.active {
+  background: var(--gold);
+  color: #2A1A00;
+}
+.theme-btn-compact {
+  min-width: 40px;
+  min-height: 40px;
+}
+.theme-menu-item {
+  width: 100%;
+  text-align: left;
+}
+@media (max-width: 480px) {
+  .hero-title-starbound { letter-spacing: 1px; }
 }

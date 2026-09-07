@@ -1,4 +1,4 @@
-/* STARLIT PIP — Input: keyboard (remappable) + touch + gamepad */
+/* STARBOUND — Input: keyboard (remappable) + touch + gamepad */
 (function(global){
   'use strict';
   const DEFAULTS={left:'KeyA',right:'KeyD',jump:'Space',down:'KeyS',run:'ShiftLeft',action:'KeyE',pause:'Escape',altJump:'KeyW'};
