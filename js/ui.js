@@ -11,6 +11,8 @@
       this.bindNav(); this.bindActions(); this.bindSettings(); this.bindReviews();
       this.renderWorldsHome(); this.renderLevelSelect(); this.refreshHero(); this.applySettingsToDom(); this.renderReviews();
       window.addEventListener('resize',()=>this.fitTouch());
+      window.addEventListener('orientationchange',()=>{ this.fitTouch(); if(global.SP_Engine&&SP_Engine.fitCanvas) SP_Engine.fitCanvas(); });
+      document.addEventListener('fullscreenchange',()=>{ this.fitTouch(); if(global.SP_Engine&&SP_Engine.fitCanvas) SP_Engine.fitCanvas(); });
       this.fitTouch();
       $('#qMusic').addEventListener('input',e=>{ SP_Save.data.settings.music=+e.target.value; SP_Save.write(); SP_Audio.setVolumes(SP_Save.data.settings); });
       $('#qSfx').addEventListener('input',e=>{ SP_Save.data.settings.sfx=+e.target.value; SP_Save.write(); SP_Audio.setVolumes(SP_Save.data.settings); });
@@ -87,6 +89,14 @@
       }
       // viewport just became visible/chrome changed: refit crisp canvas + touch/hints
       if(view==='game'&&global.SP_Engine&&SP_Engine.fitCanvas) SP_Engine.fitCanvas();
+      // mobile portrait: game first — keep secondary accordions collapsed by default
+      if(view==='game'&&window.matchMedia){
+        try{
+          if(window.matchMedia('(max-width: 600px) and (orientation: portrait)').matches){
+            $$('.game-side details[open]').forEach(d=>{ d.open=false; });
+          }
+        }catch(e){}
+      }
       this.fitTouch();
     },
     action(a){

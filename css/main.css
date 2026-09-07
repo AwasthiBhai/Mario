@@ -25,8 +25,8 @@
   --h2: clamp(1.35rem, 4.6vw + .6rem, 2rem);
   --h3: clamp(1.02rem, 2.8vw + .55rem, 1.3rem);
   --body-fs: clamp(.92rem, 1.6vw + .55rem, 1.02rem);
-  --tc-size: clamp(48px, 13vw, 60px);
-  --tc-gap: clamp(8px, 2.6vw, 14px);
+  --tc-size: clamp(48px, 14vw, 60px);
+  --tc-gap: clamp(8px, 2.5vw, 12px);
   --sat: env(safe-area-inset-top, 0px);
   --sab: env(safe-area-inset-bottom, 0px);
   --sal: env(safe-area-inset-left, 0px);
@@ -1078,13 +1078,25 @@ kbd {
   border-radius: 0;
   border: 0;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
   width: 100%;
-  height: 100%
+  height: 100%;
+  background: #000;
+  overflow-y: auto
 }
 
 .canvas-wrap:fullscreen #game {
+  flex: 0 1 auto;
+  align-self: center;
+  width: min(100%, calc((100dvh - var(--tc-size, 60px) - 32px - var(--sab)) * 1.77778));
+  max-height: calc(100dvh - var(--tc-size, 60px) - 32px - var(--sab));
+  margin: auto
+}
+
+/* when touch bar is hidden (desktop fullscreen), let the game use full height */
+body:not(.show-touch) .canvas-wrap:fullscreen #game {
   width: min(100%, 177.78dvh);
   max-height: 100dvh
 }
@@ -2131,7 +2143,7 @@ body.show-touch .touch {
 /* ---- short landscape (phones rotated): chrome slims, game wins ---- */
 @media(max-height:500px) and (orientation:landscape) {
   :root {
-    --tc-size: clamp(42px, 9vh, 52px)
+    --tc-size: clamp(56px, 9vh, 72px)
   }
 
   .site-header {
@@ -2201,4 +2213,274 @@ body.reduced-motion * {
 :focus-visible {
   outline: 3px solid var(--gold);
   outline-offset: 2px
+}
+
+/* ============================================================
+   MOBILE GAMEPLAY UI FIX — portrait compact + landscape bar below
+   Desktop is untouched: every rule below requires a mobile
+   width + orientation (+ coarse pointer where it matters) and
+   body.show-touch, so keyboard/mouse setups never match.
+   Game engine, levels, audio, fullscreen JS are unchanged.
+   ============================================================ */
+
+/* Never show keyboard hints when touch controls are active (JS also toggles). */
+body.show-touch #hintKbd {
+  display: none !important
+}
+
+/* Short touch hint: single compact line, never wraps into a paragraph. */
+#hintTouch {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap
+}
+
+/* ---------- MOBILE PORTRAIT: small bar BELOW the game ---------- */
+@media (max-width: 600px) and (orientation: portrait) {
+  :root {
+    --tc-size: clamp(48px, 14vw, 60px);
+    --tc-gap: clamp(8px, 2.5vw, 12px)
+  }
+
+  /* Game gets priority: tight chrome, no giant cards above gameplay. */
+  .game-layout {
+    gap: 8px;
+    padding-top: 8px;
+    overflow: clip
+  }
+
+  .game-shell {
+    padding: 6px;
+    max-width: 100%
+  }
+
+  .canvas-wrap {
+    max-width: 100%
+  }
+
+  /* Move touch controls out of the viewport into a dedicated bar below. */
+  body.show-touch .canvas-wrap {
+    display: flex;
+    flex-direction: column
+  }
+
+  body.show-touch #game {
+    flex: 0 0 auto;
+    width: 100%
+  }
+
+  body.show-touch .touch {
+    position: static;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px calc(10px + var(--sar)) calc(10px + var(--sab)) calc(10px + var(--sal));
+    background: #070b20;
+    border-top: 1px solid #232c66;
+    pointer-events: auto;
+    z-index: 4
+  }
+
+  .t-left,
+  .t-right {
+    align-items: center;
+    min-width: 0
+  }
+
+  /* Keep the current visual identity: semi-transparent, small press feedback. */
+  body.show-touch .touch button {
+    opacity: .92
+  }
+
+  body.show-touch .touch button.on,
+  body.show-touch .touch button:active {
+    transform: scale(.9);
+    opacity: 1
+  }
+
+  /* Compact HUD: only lives/coins/timer survive (.hud-sec hides). */
+  .hud {
+    font-size: .72rem;
+    top: 6px;
+    left: 6px;
+    right: 6px;
+    gap: 4px
+  }
+
+  .hud-left,
+  .hud-right {
+    gap: 4px
+  }
+
+  .hud-pill {
+    padding: 3px 8px
+  }
+
+  .hud-sec {
+    display: none !important
+  }
+
+  /* Short hint, no keyboard noise on touch devices. */
+  #hintTouch {
+    font-size: .72rem;
+    margin: 6px 4px 0
+  }
+
+  /* Secondary info stays collapsed & compact; game is seen first. */
+  .game-side {
+    gap: 8px
+  }
+}
+
+/* ---------- MOBILE LANDSCAPE: larger bar BELOW the game ---------- */
+@media (max-width: 900px) and (orientation: landscape) {
+  :root {
+    --tc-size: clamp(56px, 9vh, 72px);
+    --tc-gap: clamp(10px, 2vw, 18px)
+  }
+
+  .game-layout {
+    gap: 8px;
+    padding-top: 6px;
+    overflow: clip
+  }
+
+  .game-shell {
+    padding: 8px;
+    max-width: 100%
+  }
+
+  /* Dedicated responsive control bar below the viewport. */
+  body.show-touch .canvas-wrap {
+    display: flex;
+    flex-direction: column
+  }
+
+  body.show-touch #game {
+    flex: 0 0 auto;
+    width: 100%
+  }
+
+  body.show-touch .touch {
+    position: static;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px calc(14px + var(--sar)) calc(10px + var(--sab)) calc(14px + var(--sal));
+    background: #070b20;
+    border-top: 1px solid #232c66;
+    pointer-events: auto;
+    z-index: 4
+  }
+
+  .t-left,
+  .t-right {
+    align-items: center;
+    min-width: 0
+  }
+
+  body.show-touch .touch button {
+    opacity: .94
+  }
+
+  body.show-touch .touch button.on,
+  body.show-touch .touch button:active {
+    transform: scale(.9);
+    opacity: 1
+  }
+
+  /* Landscape chrome slims so the game keeps maximum vertical space. */
+  .hint,
+  #hintTouch,
+  #hintKbd {
+    display: none !important
+  }
+
+  .hud {
+    font-size: .7rem
+  }
+
+  .hud-sec {
+    display: none !important
+  }
+}
+
+/* ---------- FULLSCREEN touch bar (both orientations) ---------- */
+body.show-touch .canvas-wrap:fullscreen {
+  justify-content: center
+}
+
+body.show-touch .canvas-wrap:fullscreen #game {
+  margin: 0 auto
+}
+
+body.show-touch .canvas-wrap:fullscreen .touch {
+  position: static;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--tc-gap);
+  padding: 10px calc(14px + var(--sar)) calc(12px + var(--sab)) calc(14px + var(--sal));
+  background: rgba(4, 6, 18, .96);
+  border-top: 1px solid #232c66;
+  pointer-events: auto
+}
+
+/* ---------- LARGE TABLETS (touch): same bar, more breathing room ---------- */
+@media (min-width: 601px) and (max-width: 1024px) and (pointer: coarse) {
+  :root {
+    --tc-gap: clamp(12px, 2.5vw, 20px)
+  }
+
+  body.show-touch .canvas-wrap {
+    display: flex;
+    flex-direction: column
+  }
+
+  body.show-touch #game {
+    flex: 0 0 auto;
+    width: 100%
+  }
+
+  body.show-touch .touch {
+    position: static;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px calc(16px + var(--sar)) calc(12px + var(--sab)) calc(16px + var(--sal));
+    background: #070b20;
+    border-top: 1px solid #232c66;
+    pointer-events: auto
+  }
+
+  .t-left,
+  .t-right {
+    align-items: center
+  }
 }
