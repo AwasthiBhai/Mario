@@ -1,0 +1,55 @@
+# Daily safety backup of the public global-reviews document.
+#
+# This workflow is NOT part of the review runtime path: submissions and reads
+# go directly between browsers and the shared backend. This job only keeps a
+# versioned copy (data/reviews-backup.json) so reviews can be restored after
+# vandalism or backend expiry. It uses NO secrets — the backup reads the
+# same public document every visitor's browser reads.
+#
+# RESTORE RUNBOOK (maintainer, if the live document is ever wiped):
+#   1. Take the newest good data/reviews-backup.json content.
+#   2. POST it back: curl -X POST
+#      https://mantledb.sh/v2/starlit-pip-guestbook/reviews
+#      -H "Content-Type: application/json" -d @data/reviews-backup.json
+#   3. Verify: open Reviews on the live site.
+#
+# If pushes fail with 403: Repo → Settings → Actions → General → Workflow
+# permissions → "Read and write permissions".
+
+name: Backup global reviews
+
+on:
+  schedule:
+    - cron: "30 4 * * *" # daily, 04:30 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch public reviews document
+        run: |
+          curl -s --max-time 30 \
+            "https://mantledb.sh/v2/starlit-pip-guestbook/reviews" \
+            -o /tmp/reviews-live.json
+          node -e "const d=require('/tmp/reviews-live.json');if(!d||!Array.isArray(d.reviews))throw new Error('unexpected shape');console.log('live reviews: '+d.reviews.length)"
+          mkdir -p data
+          cp /tmp/reviews-live.json data/reviews-backup.json
+
+      - name: Commit backup if changed
+        run: |
+          if git diff --quiet -- data/reviews-backup.json; then
+            echo "Backup unchanged."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/reviews-backup.json
+          git commit -m "Backup global reviews snapshot"
+          git push

@@ -275,9 +275,7 @@
           if(!res.ok){ if(err) err.textContent=res.errors; SP_Audio.sfx('hurt'); return; }
           $('#revName').value=''; $('#revText').value=''; this.reviewRating=0;
           stars.forEach(b=>b.classList.remove('lit'));
-          if(ok) ok.textContent=res.pending
-            ?'★ Review received! It will appear for everyone after the next publish sync (about every 15 minutes). ★'
-            :'★ Review shared with players everywhere! ★';
+          if(ok) ok.textContent='★ Review shared with players everywhere! ★';
           SP_Audio.sfx('goal');
           this.renderReviews();
         });
@@ -317,9 +315,7 @@
         if(status){
           if(!res.ok){ status.className='rev-status error'; status.textContent='⚠ '+res.error; if(retry) retry.classList.remove('hidden'); }
           else if(res.stale){ status.className='rev-status stale'; status.textContent='⚠ '+res.error; if(retry) retry.classList.remove('hidden'); }
-          else { status.className='rev-status live'; status.textContent=SP_Reviews.backend()==='supabase'
-            ?'🌍 Live — shared by players everywhere'
-            :'🌍 Global reviews · new submissions publish every ~15 min'; }
+          else { status.className='rev-status live'; status.textContent='🌍 Live — shared by players everywhere'; }
         }
         list.innerHTML='';
         if(!arr.length){

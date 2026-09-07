@@ -51,7 +51,7 @@ There is no build. The repository root **is** the website:
 | `js/intro.js`   | "BundLal Studios Presents" cinematic |
 | `js/ui.js`      | Navigation, HUD, level select, reviews, settings |
 | `js/save.js`    | localStorage saves                   |
-| `js/reviews-config.js` | Backend endpoints/keys for global reviews (public-safe only) |
+| `js/reviews-config.js` | Shared-backend endpoints for global reviews (zero secrets) |
 | `js/reviews.js` | Global shared reviews (`SP_Reviews`, async load/submit) |
 | `js/input.js`   | Keyboard (remappable) + touch + gamepad |
 | `favicon.svg`   | Favicon                              |
@@ -84,41 +84,44 @@ Notes:
 - Leaving a level / pausing to menus: music OFF/ducked
 - Browsers block autoplay: music starts after the first click/tap (intro button)
 
-## Reviews (global, shared — zero browser secrets)
+## Reviews (global, shared — zero secrets)
 
-Reviews are global: a submission from one browser appears for every visitor.
-The design deliberately contains **no credential in browser code** (see
-`js/reviews-config.js`, audited):
+One authoritative source: a single shared backend document
+`{"reviews":[...]}` (MantleDB namespace `starlit-pip-guestbook`, entry
+`reviews`). The namespace is UNCLAIMED, so all access is keyless — no
+credential exists anywhere: not in the repo, not in the browser, not in
+Actions secrets. Nothing can leak.
 
-- **Published reviews** live in git: [`data/reviews.json`](data/reviews.json),
-  served same-origin by GitHub Pages. Browsers can only READ it — no CORS,
-  no key, no login. Visitors **cannot delete or modify published reviews**;
-  published data changes only via git push from the publish workflow or a
-  collaborator. There is no private data and no admin surface in the browser.
-- **Submissions** are POSTed as single entries into a KEYLESS inbox
-  (`INBOX_NAMESPACE` in config). The inbox name is public by design — a
-  mailbox slot anyone may drop into; no key exists or is needed. A scheduled
-  workflow (`.github/workflows/reviews-aggregate.yml`, every 15 min) drains
-  the inbox with `tools/aggregate-reviews.js`, strictly re-validates every
-  entry server-side, appends valid ones to `data/reviews.json`, and pushes.
-  New reviews therefore appear after the next sync (~15 min, plus deploy).
-- Worst case from a malicious visitor: spam/deletion confined to the
-  PENDING queue (bounded by per-run caps and 15-min drains). Published
-  reviews are unaffected. If the inbox namespace is ever claimed/squatted
-  (writes start returning 401), the aggregator fails loudly with a runbook:
-  pick a new `INBOX_NAMESPACE`, update the config, redeploy.
-- `localStorage` holds **only** a read cache of the last fetched published
-  list (offline fallback) plus read-only pre-global "legacy" reviews shown
-  separately — it is not the database.
-- Review text is rendered as plain text (`textContent` only). If backends are
-  unreachable, Reviews shows a friendly error + retry while the game works on.
-- **Optional instant path:** Supabase (Postgres, server timestamps). Create a
+- **Submit:** validate → GET fresh doc → prepend → POST → backend confirms
+  `HTTP 200 {"success":true}` → UI reports success. No redeploy, no Actions,
+  no polling. (`js/reviews.js`: `SP_Reviews.submit()` resolves `ok:true`
+  only after that confirmation.)
+- **Read:** every Reviews open performs a genuine backend GET (newest
+  first); stats come from that live data. Verified backend behavior:
+  keyless POST creates/overwrites, immediate read-after-write consistency,
+  malformed JSON rejected (400), CORS preflight passes for the Pages origin.
+- `localStorage` holds **only** a read cache of the last fetched list
+  (used solely when the backend is unreachable) plus read-only pre-global
+  "legacy" reviews shown separately — never the source of truth.
+- Review text is rendered as plain text (`textContent` only). Every fetch
+  has a 12 s timeout; failures show "Unable to load reviews. Please try
+  again." + Retry while the game keeps working. The UI offers no delete
+  button for shared reviews.
+- **Honest limits** (inherent to any anonymous public guestbook): spam or
+  deletion cannot be cryptographically prevented without user accounts.
+  Mitigations: strict validation, bounded doc size, and a daily secret-free
+  [backup workflow](.github/workflows/reviews-backup.yml) committing
+  `data/reviews-backup.json` on change — see its RESTORE RUNBOOK header.
+  If writes ever return 401 (namespace claimed by someone else): rename the
+  namespace in `js/reviews-config.js`, redeploy, restore from backup.
+- **Optional strict path:** Supabase (Postgres, server timestamps). Create a
   free project, run [`supabase-reviews.sql`](supabase-reviews.sql), paste the
   Project URL + `anon` key into `js/reviews-config.js` — the code switches
   automatically. The anon key is browser-safe by design (RLS: SELECT +
   INSERT only, no UPDATE/DELETE). Never commit a `service_role` key.
 
-If pushes from the publish workflow fail with 403: Repo → Settings →
+GitHub Actions deploys website code only; it is never in the review
+submit/read path. If a workflow push fails with 403: Repo → Settings →
 Actions → General → Workflow permissions → "Read and write permissions".
 
 ## License / assets
