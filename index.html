@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>STARLIT PIP — Echoes of the Aether | BundLal Studios</title>
+<meta name="description" content="STARLIT PIP: a 50-level 2D platform adventure by BundLal Studios. Leap between 10 worlds, rekindle the stars.">
+<meta name="theme-color" content="#0B1026">
+<meta property="og:type" content="website">
+<meta property="og:title" content="STARLIT PIP — Echoes of the Aether">
+<meta property="og:description" content="A 50-level 2D platform adventure by BundLal Studios. Play Pip the lantern-fox: 10 worlds, 10 bosses, original generative music. Free in your browser.">
+<meta property="og:image" content="favicon.svg">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="STARLIT PIP — Echoes of the Aether">
+<meta name="twitter:description" content="50 levels · 10 worlds · 10 bosses. A complete browser platformer by BundLal Studios.">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+<!-- ============ CINEMATIC INTRO ============ -->
+<div id="intro" class="intro" aria-hidden="false">
+  <canvas id="introCanvas"></canvas>
+  <div class="intro-vignette"></div>
+  <div class="intro-center">
+    <div id="introStudio" class="intro-studio">BundLal Studios <span>Presents</span></div>
+    <div id="introLogo" class="intro-logo hidden">
+      <svg viewBox="0 0 640 220" class="logo-svg-lg" aria-label="Starlit Pip logo">
+        <defs>
+          <linearGradient id="lgGold" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#FFE9A8"/><stop offset=".5" stop-color="#FFC94D"/><stop offset="1" stop-color="#FF8A3D"/>
+          </linearGradient>
+          <filter id="lgGlow" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur stdDeviation="10" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <g filter="url(#lgGlow)">
+          <path d="M320 18 L332 52 L368 52 L339 73 L350 108 L320 86 L290 108 L301 73 L272 52 L308 52 Z" fill="url(#lgGold)"/>
+        </g>
+        <text x="320" y="155" text-anchor="middle" font-family="Baloo 2, Nunito, sans-serif" font-weight="800" font-size="72" fill="#FFF7E0" letter-spacing="2" style="paint-order:stroke" stroke="#3A2400" stroke-width="8">STARLIT PIP</text>
+        <text x="320" y="188" text-anchor="middle" font-family="Nunito, sans-serif" font-weight="700" font-size="20" fill="#FFD97A" letter-spacing="6">ECHOES OF THE AETHER</text>
+      </svg>
+    </div>
+    <div id="introClick" class="intro-click hidden">
+      <div class="click-pulse"></div>
+      <button id="introStartBtn" class="btn btn-gold btn-lg">✦ CLICK TO START ✦</button>
+      <p class="intro-note">sound on recommended · headphones best</p>
+    </div>
+  </div>
+  <button id="introSkip" class="intro-skip hidden">SKIP INTRO ⏭</button>
+  <div class="intro-letterbox top"></div>
+  <div class="intro-letterbox bot"></div>
+</div>
+
+<!-- ============ LOADING ============ -->
+<div id="loader" class="loader hidden">
+  <div class="loader-card">
+    <div class="loader-logo">✦ STARLIT PIP ✦</div>
+    <div class="loader-bar"><div id="loaderFill" class="loader-fill"></div></div>
+    <p id="loaderTip" class="loader-tip">Tip: Hold SHIFT to run farther and jump higher.</p>
+  </div>
+</div>
+
+<!-- ============ SITE HEADER ============ -->
+<header id="siteHeader" class="site-header">
+  <a class="brand" href="#home" data-nav="home">
+    <span class="brand-badge" aria-hidden="true">
+      <svg viewBox="0 0 48 48" class="brand-svg"><circle cx="24" cy="24" r="21" fill="#141B3D" stroke="#FFC94D" stroke-width="2.5"/><path d="M24 8 L27 18 L38 18 L29 24 L32 35 L24 28 L16 35 L19 24 L10 18 L21 18 Z" fill="#FFC94D"/><circle cx="24" cy="24" r="4" fill="#fff7e0"/></svg>
+    </span>
+    <span class="brand-text"><strong>STARLIT PIP</strong><em>BundLal Studios</em></span>
+  </a>
+  <nav class="site-nav" aria-label="Main">
+    <button data-nav="home" class="nav-link active">Home</button>
+    <button data-nav="game" class="nav-link">Game</button>
+    <button data-nav="levels" class="nav-link">Levels</button>
+    <button data-nav="reviews" class="nav-link">Reviews</button>
+    <button data-nav="howto" class="nav-link">How to Play</button>
+    <button data-nav="settings" class="nav-link">Settings</button>
+    <button data-nav="credits" class="nav-link">Credits</button>
+    <button data-nav="about" class="nav-link">About</button>
+  </nav>
+  <div class="header-actions">
+    <button id="hdrMute" class="icon-btn" title="Mute">🔊</button>
+    <button id="hdrMenuBtn" class="icon-btn only-mobile" title="Menu">☰</button>
+    <button class="btn btn-gold btn-sm" data-nav="game" id="hdrPlay">▶ Play</button>
+  </div>
+</header>
+<div id="mobileNav" class="mobile-nav hidden">
+  <button data-nav="home">Home</button><button data-nav="game">Game</button>
+  <button data-nav="levels">Levels</button><button data-nav="reviews">Reviews</button><button data-nav="howto">How to Play</button>
+  <button data-nav="settings">Settings</button><button data-nav="credits">Credits</button>
+  <button data-nav="about">About</button>
+</div>
+
+<main id="app">
+<!-- ============ HOME ============ -->
+<section id="view-home" class="view active">
+  <div class="hero">
+    <canvas id="heroCanvas" aria-hidden="true"></canvas>
+    <div class="hero-inner">
+      <div class="hero-copy">
+        <div class="eyebrow">✦ BundLal Studios presents ✦</div>
+        <h1 class="hero-title"><span class="t1">STARLIT</span> <span class="t2">PIP</span></h1>
+        <p class="hero-sub">Echoes of the Aether — a 50-level platform adventure across 10 handcrafted worlds.</p>
+        <p class="hero-desc">Play <strong>Pip</strong>, a lantern-fox cub. Run, bounce, outwit 7 critter species, dodge hazards, find secret relics, topple 10 bosses — and face the <strong>Voidstar</strong> in Level 50.</p>
+        <div class="hero-cta">
+          <button class="btn btn-gold btn-lg" data-action="play">▶ Play Now</button>
+          <button class="btn btn-ghost btn-lg" data-action="continue">Continue</button>
+          <button class="btn btn-ghost btn-lg" data-action="newgame">New Game</button>
+        </div>
+        <div class="hero-stats" id="heroStats">
+          <div><strong id="statProgress">0/50</strong><span>levels cleared</span></div>
+          <div><strong id="statCoins">0</strong><span>star shards</span></div>
+          <div><strong id="statRelics">0/50</strong><span>relics</span></div>
+          <div><strong id="statScore">0</strong><span>best score</span></div>
+        </div>
+      </div>
+      <div class="hero-art" aria-hidden="true">
+        <div class="pip-stage">
+          <div class="pip-hero" id="pipHero">
+            <div class="pip-fox"><div class="pip-ear l"></div><div class="pip-ear r"></div><div class="pip-face"><div class="pip-eye l"></div><div class="pip-eye r"></div><div class="pip-nose"></div></div><div class="pip-tail"></div><div class="pip-lantern"></div></div>
+          </div>
+          <div class="hero-platforms"><span></span><span></span><span></span></div>
+          <div class="hero-coins"><i></i><i></i><i></i><i></i><i></i></div>
+        </div>
+      </div>
+    </div>
+    <div class="hero-wave" aria-hidden="true"></div>
+  </div>
+
+  <div class="section wrap">
+    <h2>✦ Features ✦</h2>
+    <div class="cards">
+      <div class="card"><div class="card-ico">🌍</div><h3>50 Levels · 10 Worlds</h3><p>Meadows, caverns, dunes, peaks, treetops, reefs, skies, magma, ruins and the Starfall Citadel — each with unique art, music, hazards and secrets.</p></div>
+      <div class="card"><div class="card-ico">🦊</div><h3>Original Hero: Pip</h3><p>A lantern-fox cub with buttery acceleration, variable jumps, wall forgiveness, 10 animation states and 5 power-ups.</p></div>
+      <div class="card"><div class="card-ico">👾</div><h3>7 Critters + 10 Bosses</h3><p>Walkers, sprinters, flyers, hoppers, shelled brutes, spitters and patrollers — plus a multi-phase final boss: the Voidstar.</p></div>
+      <div class="card"><div class="card-ico">💾</div><h3>Saves & Bests</h3><p>Auto-save to your browser. Unlocks, best scores, best times, coins and relics survive refresh.</p></div>
+      <div class="card"><div class="card-ico">🎮</div><h3>Keyboard · Touch · Gamepad</h3><p>Remappable keys, big friendly touch buttons, and Gamepad API support for sticks, jump, action and pause.</p></div>
+      <div class="card"><div class="card-ico">🎵</div><h3>Generative Audio</h3><p>100% original WebAudio soundtrack — ambient intro, 10 world themes, boss & ending music, 20+ synthesized SFX. No ripped assets.</p></div>
+    </div>
+  </div>
+
+  <div class="section wrap split">
+    <div>
+      <h2>Meet Pip 🦊</h2>
+      <p><strong>Pip</strong> is the last lantern-fox of Ember Meadow. When the Voidstar swallowed the sky-lanterns, Pip lit one small ember and set out across the Aether to rekindle all 50 beacons.</p>
+      <ul class="ticks">
+        <li>Idle · Walk · Run · Jump · Fall · Crouch · Hurt · Death · Victory · Starbolt</li>
+        <li>Power-ups: Heartberry · Aether Shield · Swiftleaf · Springshroom · Starbolt</li>
+        <li>Personality: brave, bouncy, snack-motivated</li>
+      </ul>
+      <button class="btn btn-gold" data-action="play">Start the adventure</button>
+    </div>
+    <div class="pip-showcase"><div class="pip-fox big"><div class="pip-ear l"></div><div class="pip-ear r"></div><div class="pip-face"><div class="pip-eye l"></div><div class="pip-eye r"></div><div class="pip-nose"></div></div><div class="pip-tail"></div><div class="pip-lantern"></div></div>
+      <div class="chips"><span>🏃 run</span><span>🦘 bounce</span><span>✦ starbolt</span><span>🛡 shield</span></div>
+    </div>
+  </div>
+
+  <div class="section wrap">
+    <h2>Worlds <small>10 worlds · 5 levels each</small></h2>
+    <div id="worldGridHome" class="world-grid"></div>
+  </div>
+
+  <div class="section wrap split">
+    <div>
+      <h2>Controls</h2>
+      <div class="controls-table">
+        <div><kbd>A</kbd>/<kbd>←</kbd><span>Move left</span></div>
+        <div><kbd>D</kbd>/<kbd>→</kbd><span>Move right</span></div>
+        <div><kbd>W</kbd>/<kbd>↑</kbd>/<kbd>Space</kbd><span>Jump (hold = higher)</span></div>
+        <div><kbd>S</kbd>/<kbd>↓</kbd><span>Crouch / drop</span></div>
+        <div><kbd>Shift</kbd><span>Run</span></div>
+        <div><kbd>E</kbd>/<kbd>J</kbd><span>Starbolt action</span></div>
+        <div><kbd>Esc</kbd>/<kbd>P</kbd><span>Pause</span></div>
+      </div>
+      <button class="btn btn-ghost" data-nav="howto">Full guide →</button>
+    </div>
+    <div class="card glow">
+      <h3>About the game</h3>
+      <p><strong>STARLIT PIP: Echoes of the Aether</strong> is a complete browser platformer built with canvas, vanilla JS modules and generative audio. No downloads, no accounts — your progress stays on this device.</p>
+      <h3>Studio</h3>
+      <p><strong>BundLal Studios</strong> — small team, big skies. We make cozy-but-challenging adventures with original art, music and code.</p>
+      <button class="btn btn-gold btn-sm" data-nav="about">More about →</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ GAME ============ -->
+<section id="view-game" class="view">
+  <div class="wrap game-layout">
+    <div class="game-shell">
+      <div class="game-topbar">
+        <button class="btn btn-ghost btn-sm" data-nav="home">← Menu</button>
+        <div class="game-title" id="gameTitleLabel">World 1 · Level 1</div>
+        <div class="game-top-actions">
+          <button id="btnPauseTop" class="icon-btn" title="Pause (Esc)">⏸</button>
+          <button id="btnMuteGame" class="icon-btn" title="Mute">🔊</button>
+          <button id="btnFull" class="icon-btn" title="Fullscreen">⛶</button>
+        </div>
+      </div>
+      <div class="canvas-wrap" id="canvasWrap">
+        <canvas id="game" width="960" height="540"></canvas>
+        <div id="hud" class="hud">
+          <div class="hud-left">
+            <span class="hud-pill hud-sec" id="hudLevel">1-1</span>
+            <span class="hud-pill hud-sec">⭐ <b id="hudScore">0</b></span>
+            <span class="hud-pill">🪙 <b id="hudCoins">0/0</b></span>
+            <span class="hud-pill">❤ <b id="hudLives">3</b></span>
+          </div>
+          <div class="hud-right">
+            <span class="hud-pill">⏱ <b id="hudTime">0:00</b></span>
+            <span class="hud-pill hud-sec" id="hudPower">✦</span>
+          </div>
+        </div>
+        <div id="rotateChip" class="rotate-chip hidden">🔄 Rotate for a bigger view — portrait plays fine too</div>
+        <div id="touch" class="touch">
+          <div class="t-left"><button data-t="left" aria-label="Move left">◀</button><button data-t="right" aria-label="Move right">▶</button></div>
+          <div class="t-right"><button data-t="action" aria-label="Action">✦</button><button data-t="jump" aria-label="Jump">▲</button><button data-t="pause" class="t-pause" aria-label="Pause">⏸</button></div>
+        </div>
+        <!-- overlays -->
+        <div id="menuOverlay" class="overlay">
+          <div class="panel menu-panel">
+            <div class="mini-logo">✦ STARLIT PIP ✦</div>
+            <h2>Main Menu</h2>
+            <button class="btn btn-gold btn-block" data-action="play">▶ &nbsp;PLAY</button>
+            <button class="btn btn-ghost btn-block" data-action="continue">CONTINUE</button>
+            <button class="btn btn-ghost btn-block" data-action="newgame">NEW GAME</button>
+            <button class="btn btn-ghost btn-block" data-nav="levels">LEVEL SELECT</button>
+            <button class="btn btn-ghost btn-block" data-nav="howto">HOW TO PLAY</button>
+            <button class="btn btn-ghost btn-block" data-nav="settings">SETTINGS</button>
+            <button class="btn btn-ghost btn-block" data-nav="credits">CREDITS</button>
+          </div>
+        </div>
+        <div id="pauseOverlay" class="overlay hidden">
+          <div class="panel"><h2>⏸ Paused</h2>
+            <button class="btn btn-gold btn-block" data-action="resume">RESUME</button>
+            <button class="btn btn-ghost btn-block" data-action="restart">RESTART</button>
+            <button class="btn btn-ghost btn-block" data-nav="settings">SETTINGS</button>
+            <button class="btn btn-ghost btn-block" data-nav="levels">LEVEL SELECT</button>
+            <button class="btn btn-ghost btn-block" data-action="tomenu">MAIN MENU</button>
+          </div>
+        </div>
+        <div id="completeOverlay" class="overlay hidden">
+          <div class="panel"><h2>✦ LEVEL COMPLETE ✦</h2>
+            <div id="completeStats" class="stat-grid"></div>
+            <div id="newBest" class="newbest hidden">★ NEW BEST! ★</div>
+            <button class="btn btn-gold btn-block" data-action="next">NEXT LEVEL →</button>
+            <div class="row2"><button class="btn btn-ghost" data-action="restart">REPLAY</button><button class="btn btn-ghost" data-nav="levels">LEVELS</button></div>
+            <button class="btn btn-ghost btn-block" data-action="tomenu">MAIN MENU</button>
+          </div>
+        </div>
+        <div id="overOverlay" class="overlay hidden">
+          <div class="panel"><h2>💀 GAME OVER</h2><p class="muted">Pip's lantern flickers out… but embers never die.</p>
+            <button class="btn btn-gold btn-block" data-action="restart">↻ RETRY</button>
+            <div class="row2"><button class="btn btn-ghost" data-nav="levels">LEVELS</button><button class="btn btn-ghost" data-action="tomenu">MENU</button></div>
+          </div>
+        </div>
+        <div id="endingOverlay" class="overlay hidden">
+          <div class="panel wide"><h2>✦ THE STARS ARE LIT ✦</h2>
+            <div id="endingText" class="ending-text"></div>
+            <div id="endingStats" class="stat-grid"></div>
+            <button class="btn btn-gold btn-block" data-action="credits">★ CREDITS ★</button>
+            <button class="btn btn-ghost btn-block" data-action="tomenu">MAIN MENU</button>
+          </div>
+        </div>
+      </div>
+      <p class="hint" id="hintKbd">kbd: <kbd>A</kbd><kbd>D</kbd> move · <kbd>Space</kbd> jump · <kbd>Shift</kbd> run · <kbd>E</kbd> starbolt · <kbd>Esc</kbd> pause — gamepad supported</p>
+      <p class="hint hidden" id="hintTouch">Touch controls enabled · ◀ ▶ move · ▲ jump · ✦ action · ⏸ pause</p>
+    </div>
+    <aside class="game-side">
+      <details class="card game-acc" open><summary><span class="acc-title">This level</span><span class="acc-chev" aria-hidden="true">▾</span></summary><div id="levelInfo" class="muted">—</div></details>
+      <details class="card game-acc" open><summary><span class="acc-title">Quick settings</span><span class="acc-chev" aria-hidden="true">▾</span></summary>
+        <label class="slider-row">Music <input id="qMusic" type="range" min="0" max="100" value="70"></label>
+        <label class="slider-row">SFX <input id="qSfx" type="range" min="0" max="100" value="80"></label>
+        <label class="check-row"><input id="qTouch" type="checkbox"> Touch controls</label>
+        <label class="check-row"><input id="qMotion" type="checkbox"> Reduced motion</label>
+      </details>
+      <details class="card game-acc" open><summary><span class="acc-title">Up next</span><span class="acc-chev" aria-hidden="true">▾</span></summary><div id="upNext" class="muted">—</div>
+        <button class="btn btn-gold btn-sm" data-nav="levels">Open level select</button></details>
+    </aside>
+  </div>
+</section>
+
+<!-- ============ LEVELS ============ -->
+<section id="view-levels" class="view">
+  <div class="wrap">
+    <h2>Level Select <small>50 levels · 10 worlds</small></h2>
+    <p class="muted">Clear a level to unlock the next. Boss levels glow red. ★ = relic found.</p>
+    <div id="levelWorlds"></div>
+  </div>
+</section>
+
+<!-- ============ REVIEWS ============ -->
+<section id="view-reviews" class="view">
+  <div class="wrap narrow">
+    <h2>Reviews <small>from fellow travelers</small></h2>
+    <div class="card" id="revSummary"></div>
+    <div class="card">
+      <h3>✍ Write a review</h3>
+      <form id="revForm" novalidate>
+        <label class="rev-label">Display name
+          <input id="revName" type="text" maxlength="40" placeholder="e.g. LanternFan22" autocomplete="nickname">
+        </label>
+        <div class="rev-label">Your rating
+          <div id="starPick" class="star-pick" role="radiogroup" aria-label="Star rating">
+            <button type="button" data-v="1" aria-label="1 star">★</button><button type="button" data-v="2" aria-label="2 stars">★</button><button type="button" data-v="3" aria-label="3 stars">★</button><button type="button" data-v="4" aria-label="4 stars">★</button><button type="button" data-v="5" aria-label="5 stars">★</button>
+          </div>
+        </div>
+        <label class="rev-label">Review
+          <textarea id="revText" rows="4" maxlength="600" placeholder="What did you love? Which world was toughest?"></textarea>
+        </label>
+        <p id="revErrors" class="rev-errors" role="alert"></p>
+        <p id="revOk" class="rev-ok" role="status"></p>
+        <button class="btn btn-gold" type="submit">Submit review</button>
+      </form>
+      <p class="muted"><small>Reviews are stored in this browser (localStorage) so they survive refresh and reopening. A future server version can sync them online.</small></p>
+    </div>
+    <h3>Latest reviews</h3>
+    <div id="revList" class="rev-list"></div>
+  </div>
+</section>
+
+<!-- ============ HOW TO ============ -->
+<section id="view-howto" class="view">
+  <div class="wrap narrow">
+    <h2>How to Play</h2>
+    <div class="card"><h3>Goal</h3><p>Reach the <strong>sky-lantern beacon</strong> 🚩 at the end of each level. Grab <strong>star shards</strong> 🪙, find the hidden <strong>aether relic</strong> ★, touch <strong>checkpoints</strong> 🏁 so you respawn closer, and stomp or starbolt the critters.</p></div>
+    <div class="card"><h3>Controls</h3><div class="controls-table">
+      <div><kbd>A</kbd>/<kbd>←</kbd> or left stick<span>Move left</span></div>
+      <div><kbd>D</kbd>/<kbd>→</kbd> or left stick<span>Move right</span></div>
+      <div><kbd>W</kbd>/<kbd>↑</kbd>/<kbd>Space</kbd> or <kbd>A</kbd> button<span>Jump — hold for higher</span></div>
+      <div><kbd>S</kbd>/<kbd>↓</kbd><span>Crouch / fast-drop through one-ways</span></div>
+      <div><kbd>Shift</kbd> or <kbd>RT</kbd><span>Run (faster + longer jumps)</span></div>
+      <div><kbd>E</kbd>/<kbd>J</kbd> or <kbd>X</kbd><span>Fire starbolt (with power-up)</span></div>
+      <div><kbd>Esc</kbd>/<kbd>P</kbd> or Start<span>Pause</span></div>
+    </div>
+    <p class="muted">Remap keys in Settings. Touch buttons appear on mobile / when enabled.</p></div>
+    <div class="card"><h3>Critters</h3><p><strong>Muddle</strong> walks · <strong>Zipzap</strong> sprints · <strong>Flutterby</strong> flies sine waves · <strong>Boingwart</strong> hops · <strong>Shellyhorn</strong> armored (hit only with starbolt or when flashing) · <strong>Spitpea</strong> lobs seeds · <strong>Ticktock</strong> patrols platforms. Stomp = bounce kill (+100). Starbolt = +150.</p></div>
+    <div class="card"><h3>Platforms & hazards</h3><p>Static · moving · crumbly (fall) · breakable · bouncy 🍄 · hidden ❓ (bump from below). Hazards: spikes, lava, icicles, poison tide, lightning, void. Shields block one hit; falling in pits costs a life.</p></div>
+    <div class="card"><h3>Power-ups</h3><p>🍓 <strong>Heartberry</strong> +1 HP · 🛡 <strong>Aether Shield</strong> blocks a hit · 🍃 <strong>Swiftleaf</strong> speed · 🍄 <strong>Springshroom</strong> mega-jump · ✦ <strong>Starbolt</strong> shoot. Secrets & fast clears boost score.</p></div>
+    <div class="center"><button class="btn btn-gold btn-lg" data-action="play">▶ Play now</button></div>
+  </div>
+</section>
+
+<!-- ============ SETTINGS ============ -->
+<section id="view-settings" class="view">
+  <div class="wrap narrow">
+    <h2>Settings</h2>
+    <div class="card">
+      <h3>Audio</h3>
+      <label class="slider-row">Master volume <input id="setMaster" type="range" min="0" max="100" value="80"><b id="setMasterV">80</b></label>
+      <label class="slider-row">Music <input id="setMusic" type="range" min="0" max="100" value="70"><b id="setMusicV">70</b></label>
+      <label class="slider-row">SFX <input id="setSfx" type="range" min="0" max="100" value="80"><b id="setSfxV">80</b></label>
+      <label class="check-row"><input id="setMute" type="checkbox"> Mute all</label>
+    </div>
+    <div class="card">
+      <h3>Display & comfort</h3>
+      <label class="check-row"><input id="setTouch" type="checkbox"> Always show touch controls (auto on touch devices)</label>
+      <label class="check-row"><input id="setMotion" type="checkbox"> Reduced motion (fewer particles)</label>
+      <label class="check-row"><input id="setShake" type="checkbox" checked> Screen shake</label>
+      <div class="row2"><button class="btn btn-ghost" id="btnFullscreen">⛶ Fullscreen</button><button class="btn btn-ghost" id="btnReplayIntro">▶ Replay Studio Intro</button></div>
+    </div>
+    <div class="card">
+      <h3>Controls (click, then press a key)</h3>
+      <div id="keymap" class="keymap"></div>
+      <button class="btn btn-ghost btn-sm" id="btnResetKeys">Reset defaults</button>
+    </div>
+    <div class="card danger">
+      <h3>Save data</h3>
+      <p class="muted">Progress auto-saves locally. Reset wipes unlocks, scores, coins and relics.</p>
+      <button class="btn btn-danger" id="btnResetSave">Reset all progress</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CREDITS ============ -->
+<section id="view-credits" class="view">
+  <div class="wrap narrow credits-roll">
+    <h2>✦ Credits ✦</h2>
+    <div class="card center"><div class="mini-logo">✦ STARLIT PIP ✦</div><p><strong>Echoes of the Aether</strong><br><span class="muted">A BundLal Studios original</span></p></div>
+    <div class="card"><h3>Game Design</h3><p>BundLal Studios — level systems, difficulty curve, boss encounters, economy & secrets</p>
+      <h3>Programming</h3><p>BundLal Studios — engine, physics, camera, AI, procedural level builder, save & input systems (vanilla JS + Canvas)</p>
+      <h3>Art & Animation</h3><p>BundLal Studios — 100% original vector/canvas art: Pip the lantern-fox, 7 critters, 10 bosses, 10 world themes, particles & logo (no third-party sprites)</p>
+      <h3>Audio</h3><p>BundLal Studios — 100% original generative WebAudio: ambient intro, 10 world themes, boss/ending stingers & 20+ synthesized SFX (no ripped music)</p>
+      <h3>UI / UX</h3><p>BundLal Studios — responsive site, HUD, menus, touch & gamepad support, accessibility pass</p>
+      <h3>Technology</h3><p>HTML5 Canvas · WebAudio · localStorage · Gamepad API · Google Fonts (Baloo 2 + Nunito, OFL licensed)</p>
+      <h3>Special Thanks</h3><p>Playtesters everywhere · the open web · platformer classics for inspiration (all content here is original)</p>
+      <h3>Asset Attribution</h3><p>No third-party game assets used. Fonts: Baloo 2 & Nunito under SIL Open Font License 1.1. All code, art and audio created for this project.</p>
+    </div>
+    <div class="card center"><h3>BundLal Studios</h3><p class="muted">Small team · Big skies</p><button class="btn btn-gold" data-nav="home">← Back home</button></div>
+  </div>
+</section>
+
+<!-- ============ ABOUT ============ -->
+<section id="view-about" class="view">
+  <div class="wrap narrow">
+    <h2>About</h2>
+    <div class="card"><h3>The story</h3><p>When the <strong>Voidstar</strong> devoured the sky-lanterns, the worlds of the Aether went dim. <strong>Pip</strong>, last lantern-fox of Ember Meadow, lit one stubborn ember and set out to rekindle <strong>50 beacons</strong> across <strong>10 worlds</strong> — from Dewdrop Caverns to the Starfall Citadel.</p></div>
+    <div class="card"><h3>BundLal Studios</h3><p><strong>BundLal Studios</strong> is an indie micro-studio crafting cozy-but-challenging browser adventures. <em>Starlit Pip</em> is our love letter to classic platformers — rebuilt from scratch with original characters, generative music, and a full 50-level arc.</p></div>
+    <div class="card"><h3>Details</h3><p class="muted">50 levels · 10 bosses · 7 enemy species · 5 power-ups · secrets & relics · best scores/times · keyboard + touch + gamepad · offline-friendly single file deploy.</p></div>
+  </div>
+</section>
+</main>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<footer class="footer">
+  <div class="wrap foot-grid">
+    <div><strong>✦ STARLIT PIP</strong><br><span class="muted">Echoes of the Aether · © 2026 BundLal Studios. All original content.</span></div>
+    <div class="foot-links"><button data-nav="game">Play</button><button data-nav="levels">Levels</button><button data-nav="reviews">Reviews</button><button data-nav="howto">Guide</button><button data-nav="settings">Settings</button><button data-nav="credits">Credits</button></div>
+  </div>
+</footer>
+
+<script src="js/audio.js"></script>
+<script src="js/save.js"></script>
+<script src="js/reviews.js"></script>
+<script src="js/input.js"></script>
+<script src="js/levels.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/intro.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

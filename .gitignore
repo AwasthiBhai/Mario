@@ -1,0 +1,36 @@
+# Dependencies (if tooling is ever added)
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build output (none currently — pure static site; kept for future bundlers)
+dist/
+build/
+out/
+.next/
+.vite/
+
+# Environment secrets — never commit
+.env
+.env.*
+!.env.example
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Logs & temp
+*.log
+npm-debug.log*
+.cache/
+tmp/
+temp/

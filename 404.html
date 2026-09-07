@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Page not found — STARLIT PIP | BundLal Studios</title>
+<meta name="theme-color" content="#0B1026">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0B1026;color:#FFF7E0;font-family:system-ui,'Nunito',sans-serif;text-align:center;padding:20px}
+  .card{background:#18204A;border:1px solid #FFC94D;border-radius:20px;padding:32px;max-width:420px}
+  a{display:inline-block;margin-top:16px;background:linear-gradient(180deg,#FFE9A8,#FFC94D);color:#2A1A00;font-weight:800;text-decoration:none;border-radius:14px;padding:12px 24px}
+</style>
+</head>
+<body>
+<div class="card">
+  <div>✦ STARLIT PIP ✦</div>
+  <h1>Lost in the Aether?</h1>
+  <p>This path doesn't exist. Pip will guide you back to the adventure.</p>
+  <a id="homeLink" href="./">← Back to the game</a>
+</div>
+<script>
+  // Works from any GitHub Pages project subpath (e.g. /Mario/whatever):
+  // go up to the repository root, which always serves index.html.
+  (function () {
+    try {
+      var parts = location.pathname.split('/').filter(Boolean);
+      var base = parts.length ? '/' + parts[0] + '/' : '/';
+      document.getElementById('homeLink').setAttribute('href', base);
+      location.replace(base);
+    } catch (e) { /* manual link above still works */ }
+  })();
+</script>
+</body>
+</html>
