@@ -295,8 +295,10 @@
 <!-- ============ REVIEWS ============ -->
 <section id="view-reviews" class="view">
   <div class="wrap narrow">
-    <h2>Reviews <small>from fellow travelers</small></h2>
+    <h2>Reviews <small>shared by players everywhere</small></h2>
+    <p id="revStatus" class="rev-status loading" role="status">⟳ Loading global reviews…</p>
     <div class="card" id="revSummary"></div>
+    <div class="center"><button id="revRetry" class="btn btn-ghost btn-sm hidden">↻ Retry loading reviews</button></div>
     <div class="card">
       <h3>✍ Write a review</h3>
       <form id="revForm" novalidate>
@@ -315,7 +317,7 @@
         <p id="revOk" class="rev-ok" role="status"></p>
         <button class="btn btn-gold" type="submit">Submit review</button>
       </form>
-      <p class="muted"><small>Reviews are stored in this browser (localStorage) so they survive refresh and reopening. A future server version can sync them online.</small></p>
+      <p class="muted"><small>🌍 Reviews are global — your submission is queued and appears for every player after the next publish sync (about every 15 minutes). No account needed. If the server is unreachable, the game keeps working and you can retry.</small></p>
     </div>
     <h3>Latest reviews</h3>
     <div id="revList" class="rev-list"></div>
@@ -379,7 +381,27 @@
 <section id="view-credits" class="view">
   <div class="wrap narrow credits-roll">
     <h2>✦ Credits ✦</h2>
-    <div class="card center"><div class="mini-logo">✦ STARLIT PIP ✦</div><p><strong>Echoes of the Aether</strong><br><span class="muted">A BundLal Studios original</span></p></div>
+    <div class="card center studio-banner"><div class="mini-logo">✦ STARLIT PIP ✦</div><p><strong>Echoes of the Aether</strong><br><span class="muted">A BundLal Studios original</span></p>
+      <div class="studio-name">BUNDLAL STUDIOS</div>
+      <p class="muted"><small>Small team · Big skies</small></p>
+    </div>
+    <div class="creators-block">
+      <h3 class="creators-title">✦ GAME CREATORS ✦</h3>
+      <div class="creators-grid">
+        <div class="card creator-card">
+          <div class="creator-avatar" aria-hidden="true">KA</div>
+          <div class="creator-name">Karan Awasthi</div>
+          <div class="creator-badge">★ GAME CREATOR ★</div>
+          <div class="creator-role">Game Creator / Developer</div>
+        </div>
+        <div class="card creator-card">
+          <div class="creator-avatar" aria-hidden="true">VR</div>
+          <div class="creator-name">Vaibhav Raj</div>
+          <div class="creator-badge">★ GAME CREATOR ★</div>
+          <div class="creator-role">Game Creator / Developer</div>
+        </div>
+      </div>
+    </div>
     <div class="card"><h3>Game Design</h3><p>BundLal Studios — level systems, difficulty curve, boss encounters, economy & secrets</p>
       <h3>Programming</h3><p>BundLal Studios — engine, physics, camera, AI, procedural level builder, save & input systems (vanilla JS + Canvas)</p>
       <h3>Art & Animation</h3><p>BundLal Studios — 100% original vector/canvas art: Pip the lantern-fox, 7 critters, 10 bosses, 10 world themes, particles & logo (no third-party sprites)</p>
@@ -389,7 +411,7 @@
       <h3>Special Thanks</h3><p>Playtesters everywhere · the open web · platformer classics for inspiration (all content here is original)</p>
       <h3>Asset Attribution</h3><p>No third-party game assets used. Fonts: Baloo 2 & Nunito under SIL Open Font License 1.1. All code, art and audio created for this project.</p>
     </div>
-    <div class="card center"><h3>BundLal Studios</h3><p class="muted">Small team · Big skies</p><button class="btn btn-gold" data-nav="home">← Back home</button></div>
+    <div class="card center"><h3>BundLal Studios</h3><p class="muted">Created by Karan Awasthi &amp; Vaibhav Raj</p><button class="btn btn-gold" data-nav="home">← Back home</button></div>
   </div>
 </section>
 
@@ -415,6 +437,7 @@
 
 <script src="js/audio.js"></script>
 <script src="js/save.js"></script>
+<script src="js/reviews-config.js"></script>
 <script src="js/reviews.js"></script>
 <script src="js/input.js"></script>
 <script src="js/levels.js"></script>

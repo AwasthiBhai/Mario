@@ -251,7 +251,7 @@
       $('#statRelics').textContent=d.totalRelics+'/50';
       $('#statScore').textContent=d.totalScore;
     },
-    /* ----- reviews ----- */
+    /* ----- reviews (GLOBAL shared database) ----- */
     bindReviews(){
       const stars=Array.from(document.querySelectorAll('#starPick button'));
       stars.forEach(btn=>btn.addEventListener('click',()=>{
@@ -262,48 +262,99 @@
       const form=$('#revForm');
       if(form) form.addEventListener('submit',e=>{
         e.preventDefault();
+        const btn=form.querySelector('button[type="submit"]');
         const name=$('#revName').value, text=$('#revText').value;
-        const res=SP_Reviews.add(name,this.reviewRating,text);
         const err=$('#revErrors'), ok=$('#revOk');
         if(err) err.textContent=''; if(ok) ok.textContent='';
-        if(!res.ok){ if(err) err.textContent=res.errors.join(' '); SP_Audio.sfx('hurt'); return; }
-        $('#revName').value=''; $('#revText').value=''; this.reviewRating=0;
-        stars.forEach(b=>b.classList.remove('lit'));
-        if(ok) ok.textContent='★ Review submitted successfully! ★';
-        SP_Audio.sfx('goal');
-        this.renderReviews();
+        const v=SP_Reviews.validate(name,this.reviewRating,text);
+        if(!v.ok){ if(err) err.textContent=v.errors.join(' '); SP_Audio.sfx('hurt'); return; }
+        // Only show success AFTER the shared backend confirms the write.
+        if(btn){ btn.disabled=true; btn.textContent='Submitting…'; }
+        SP_Reviews.submit(name,this.reviewRating,text).then(res=>{
+          if(btn){ btn.disabled=false; btn.textContent='Submit review'; }
+          if(!res.ok){ if(err) err.textContent=res.errors; SP_Audio.sfx('hurt'); return; }
+          $('#revName').value=''; $('#revText').value=''; this.reviewRating=0;
+          stars.forEach(b=>b.classList.remove('lit'));
+          if(ok) ok.textContent=res.pending
+            ?'★ Review received! It will appear for everyone after the next publish sync (about every 15 minutes). ★'
+            :'★ Review shared with players everywhere! ★';
+          SP_Audio.sfx('goal');
+          this.renderReviews();
+        });
       });
+      const retry=$('#revRetry');
+      if(retry) retry.addEventListener('click',()=>this.renderReviews());
       const list=$('#revList');
       if(list) list.addEventListener('click',e=>{
-        const btn=e.target.closest?e.target.closest('[data-del]'):null;
+        const btn=e.target.closest?e.target.closest('[data-del-legacy]'):null;
         if(!btn) return;
-        if(confirm('Delete this review?')){ SP_Reviews.remove(btn.getAttribute('data-del')); this.renderReviews(); }
+        if(confirm('Delete this device-only review?')){ SP_Reviews.legacyRemove(btn.getAttribute('data-del-legacy')); this.renderReviews(); }
       });
     },
     _stars(n){
       let s=''; for(let i=1;i<=5;i++) s+=i<=n?'★':'☆'; return s;
     },
     renderReviews(){
-      const sum=$('#revSummary'), list=$('#revList'); if(!sum||!list) return;
-      const st=SP_Reviews.stats();
-      let dist=''; for(let r=5;r>=1;r--){ const c=st.dist[r-1]||0, pct=st.count?Math.round(c/st.count*100):0;
-        dist+='<div class="dist-row"><span>'+r+'★</span><div class="dist-bar"><i style="width:'+pct+'%"></i></div><span>'+c+'</span></div>'; }
-      sum.innerHTML='<div class="rev-avg"><strong>'+(st.count?st.avg:'—')+'</strong><span class="rev-stars">'+(st.count?this._stars(Math.round(st.avg)):'☆☆☆☆☆')+'</span><span class="muted">'+(st.count?('Based on '+st.count+' review'+(st.count>1?'s':'')):'No reviews yet')+'</span></div><div class="rev-dist">'+dist+'</div>';
+      const sum=$('#revSummary'), list=$('#revList'), status=$('#revStatus');
+      if(!sum||!list) return;
+      if(status){ status.className='rev-status loading'; status.textContent='⟳ Loading global reviews…'; }
+      const retry=$('#revRetry'); if(retry) retry.classList.add('hidden');
+      sum.innerHTML='<div class="rev-avg"><strong>…</strong><span class="rev-stars">☆☆☆☆☆</span><span class="muted">Loading…</span></div><div class="rev-dist"></div>';
       list.innerHTML='';
-      const arr=SP_Reviews.list();
-      if(!arr.length){ const p=document.createElement('p'); p.className='muted center'; p.textContent='Be the first to review this game!'; list.appendChild(p); return; }
-      for(const r of arr){
-        const card=document.createElement('article'); card.className='card rev-card';
-        const head=document.createElement('div'); head.className='rev-head';
-        const who=document.createElement('strong'); who.textContent=r.name; // textContent: no HTML injection
-        const stars=document.createElement('span'); stars.className='rev-stars'; stars.textContent=this._stars(r.rating);
-        const when=document.createElement('span'); when.className='muted'; when.textContent=new Date(r.createdAt).toLocaleDateString();
-        head.appendChild(who); head.appendChild(stars); head.appendChild(when);
-        const body=document.createElement('p'); body.textContent=r.text;
-        const del=document.createElement('button'); del.className='btn btn-ghost btn-sm'; del.setAttribute('data-del',r.id); del.textContent='Delete';
-        card.appendChild(head); card.appendChild(body); card.appendChild(del);
-        list.appendChild(card);
-      }
+      SP_Reviews.load().then(res=>{
+        const arr=res.reviews, st=SP_Reviews.statsOf(arr);
+        let dist=''; for(let r=5;r>=1;r--){ const c=st.dist[r-1]||0, pct=st.count?Math.round(c/st.count*100):0;
+          dist+='<div class="dist-row"><span>'+r+'★</span><div class="dist-bar"><i style="width:'+pct+'%"></i></div><span>'+c+'</span></div>'; }
+        sum.innerHTML='';
+        const avg=document.createElement('div'); avg.className='rev-avg';
+        const big=document.createElement('strong'); big.textContent=st.count?String(st.avg):'—';
+        const starSpan=document.createElement('span'); starSpan.className='rev-stars'; starSpan.textContent=st.count?this._stars(Math.round(st.avg)):'☆☆☆☆☆';
+        const cnt=document.createElement('span'); cnt.className='muted';
+        cnt.textContent=st.count?('Based on '+st.count+' global review'+(st.count>1?'s':'')):'No reviews yet';
+        avg.appendChild(big); avg.appendChild(starSpan); avg.appendChild(cnt);
+        const distWrap=document.createElement('div'); distWrap.className='rev-dist'; distWrap.innerHTML=dist;
+        sum.appendChild(avg); sum.appendChild(distWrap);
+        if(status){
+          if(!res.ok){ status.className='rev-status error'; status.textContent='⚠ '+res.error; if(retry) retry.classList.remove('hidden'); }
+          else if(res.stale){ status.className='rev-status stale'; status.textContent='⚠ '+res.error; if(retry) retry.classList.remove('hidden'); }
+          else { status.className='rev-status live'; status.textContent=SP_Reviews.backend()==='supabase'
+            ?'🌍 Live — shared by players everywhere'
+            :'🌍 Global reviews · new submissions publish every ~15 min'; }
+        }
+        list.innerHTML='';
+        if(!arr.length){
+          const p=document.createElement('p'); p.className='muted center';
+          p.textContent=res.ok?'Be the first to review this game!':'Reviews could not be loaded. Please retry.';
+          list.appendChild(p);
+        }
+        for(const r of arr){
+          const card=document.createElement('article'); card.className='card rev-card';
+          const head=document.createElement('div'); head.className='rev-head';
+          const who=document.createElement('strong'); who.textContent=r.name; // textContent: no HTML injection
+          const stars=document.createElement('span'); stars.className='rev-stars'; stars.textContent=this._stars(r.rating);
+          const when=document.createElement('span'); when.className='muted'; when.textContent=new Date(r.createdAt).toLocaleDateString();
+          head.appendChild(who); head.appendChild(stars); head.appendChild(when);
+          const body=document.createElement('p'); body.textContent=r.text;
+          card.appendChild(head); card.appendChild(body);
+          list.appendChild(card);
+        }
+        // Legacy device-only reviews (pre-global), clearly labeled, never merged.
+        const legacy=SP_Reviews.legacyList();
+        if(legacy.length){
+          const det=document.createElement('details'); det.className='card rev-legacy';
+          const sm=document.createElement('summary');
+          sm.textContent='Earlier reviews on this device only ('+legacy.length+', not shared)';
+          det.appendChild(sm);
+          for(const r of legacy){
+            const row=document.createElement('div'); row.className='rev-legacy-row';
+            const t=document.createElement('span'); t.textContent=r.name+' · '+this._stars(r.rating)+' · '+r.text;
+            const del=document.createElement('button'); del.className='btn btn-ghost btn-sm';
+            del.setAttribute('data-del-legacy',r.id); del.textContent='Delete';
+            row.appendChild(t); row.appendChild(del); det.appendChild(row);
+          }
+          list.appendChild(det);
+        }
+      });
     },
     /* ----- settings ----- */
     applySettingsToDom(){

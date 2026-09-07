@@ -1,0 +1,52 @@
+# Publishes pending global reviews.
+#
+# HOW IT WORKS: browsers submit reviews as individual entries into a KEYLESS
+# MantleDB inbox namespace (no credential exists anywhere — nothing to leak).
+# This workflow drains that inbox every 15 minutes, strictly validates each
+# submission with tools/aggregate-reviews.js, appends the valid ones to
+# data/reviews.json, and pushes. GitHub Pages then serves the updated file.
+#
+# SECURITY: published reviews can ONLY change via a git push from this
+# workflow (GITHUB_TOKEN, auto-provided, never in code) or a collaborator.
+# Visitors cannot modify or delete published reviews, cannot read private
+# data (there is none), and cannot reach any admin functionality.
+#
+# If pushes fail with 403, allowlisted: Repo → Settings → Actions →
+# General → Workflow permissions → "Read and write permissions".
+
+name: Publish pending reviews
+
+on:
+  schedule:
+    - cron: "*/15 * * * *" # every 15 minutes
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  aggregate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Aggregate inbox into data/reviews.json
+        run: node tools/aggregate-reviews.js
+
+      - name: Commit and push if changed
+        run: |
+          if git diff --quiet -- data/reviews.json; then
+            echo "No new reviews to publish."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/reviews.json
+          git commit -m "Publish pending player reviews"
+          git push
