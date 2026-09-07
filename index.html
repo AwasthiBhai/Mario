@@ -13,15 +13,16 @@
 <meta property="og:type" content="website">
 <meta property="og:title" content="STARBOUND — BundLal Studios">
 <meta property="og:description" content="STARBOUND: a 50-level 2D platform adventure by BundLal Studios. Light every beacon. Reclaim the sky. Free in your browser.">
-<meta property="og:image" content="favicon.svg">
+<meta property="og:image" content="./favicon.png">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="STARBOUND — BundLal Studios">
 <meta name="twitter:description" content="50 levels · 10 worlds · 10 bosses. STARBOUND, an original browser platformer by BundLal Studios.">
-<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" href="./favicon.png">
+<link rel="apple-touch-icon" href="./favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/main.css">
+<link rel="stylesheet" href="css/main.css?v=3">
 </head>
 <body>
 <!-- ============ CINEMATIC INTRO ============ -->
@@ -31,26 +32,8 @@
   <div class="intro-center">
     <div id="introStudio" class="intro-studio">BundLal Studios <span>Presents</span></div>
     <div id="introLogo" class="intro-logo hidden">
-      <svg viewBox="0 0 640 220" class="starbound-logo" role="img" aria-label="Starbound logo">
-        <defs>
-          <linearGradient id="lgGold" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="#FFE9A8"/><stop offset=".5" stop-color="#FFC94D"/><stop offset="1" stop-color="#FF8A3D"/>
-          </linearGradient>
-          <linearGradient id="sbOrbit" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0" stop-color="#FFC94D" stop-opacity="0"/><stop offset=".5" stop-color="#FFC94D"/><stop offset="1" stop-color="#FFC94D" stop-opacity="0"/>
-          </linearGradient>
-          <filter id="lgGlow" x="-40%" y="-40%" width="180%" height="180%">
-            <feGaussianBlur stdDeviation="10" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-          </filter>
-        </defs>
-        <g filter="url(#lgGlow)">
-          <ellipse cx="320" cy="52" rx="72" ry="20" fill="none" stroke="url(#sbOrbit)" stroke-width="3"/>
-          <path d="M320 18 L332 52 L368 52 L339 73 L350 108 L320 86 L290 108 L301 73 L272 52 L308 52 Z" fill="url(#lgGold)"/>
-          <circle cx="388" cy="44" r="5" fill="#FFF7E0"/>
-        </g>
-        <text x="320" y="158" text-anchor="middle" font-family="Baloo 2, Nunito, sans-serif" font-weight="800" font-size="76" fill="#FFFFFF" letter-spacing="8" style="paint-order:stroke" stroke="#000000" stroke-width="10">STARBOUND</text>
-        <text x="320" y="190" text-anchor="middle" font-family="Nunito, sans-serif" font-weight="700" font-size="17" fill="#FFD97A" letter-spacing="4">LIGHT EVERY BEACON · RECLAIM THE SKY</text>
-      </svg>
+      <img class="intro-logo-img" src="./favicon.png" alt="STARBOUND logo" width="500" height="500">
+      <div class="intro-tagline">LIGHT EVERY BEACON · RECLAIM THE SKY</div>
     </div>
     <div id="introClick" class="intro-click hidden">
       <div class="click-pulse"></div>
@@ -66,6 +49,7 @@
 <!-- ============ LOADING ============ -->
 <div id="loader" class="loader hidden">
   <div class="loader-card">
+    <img class="loader-logo-img" src="./favicon.png" alt="STARBOUND logo" width="500" height="500">
     <div class="loader-logo">✦ STARBOUND ✦</div>
     <div class="loader-bar"><div id="loaderFill" class="loader-fill"></div></div>
     <p id="loaderTip" class="loader-tip">Tip: Hold SHIFT to run farther and jump higher.</p>
@@ -75,9 +59,7 @@
 <!-- ============ SITE HEADER ============ -->
 <header id="siteHeader" class="site-header">
   <a class="brand" href="#home" data-nav="home">
-    <span class="brand-badge-star" aria-hidden="true">
-      <svg viewBox="0 0 48 48"><ellipse cx="24" cy="22" rx="17" ry="7" fill="none" stroke="#FFC94D" stroke-width="2" opacity=".9"/><path d="M24 8 L27 18 L38 18 L29 24 L32 35 L24 28 L16 35 L19 24 L10 18 L21 18 Z" fill="#FFC94D"/><circle cx="38" cy="15" r="2.4" fill="#FFF7E0"/></svg>
-    </span>
+    <img class="brand-logo" src="./favicon.png" alt="STARBOUND logo" width="500" height="500">
     <span class="brand-text"><strong>STARBOUND</strong><em class="brand-tagline">BUNDLAL STUDIOS</em></span>
   </a>
   <nav class="site-nav" aria-label="Main">
@@ -234,6 +216,7 @@
         <!-- overlays -->
         <div id="menuOverlay" class="overlay">
           <div class="panel menu-panel">
+            <img class="menu-logo-img" src="./favicon.png" alt="STARBOUND logo" width="500" height="500">
             <div class="mini-logo">✦ STARBOUND ✦</div>
             <div class="muted"><small>Light every beacon. Reclaim the sky.</small></div>
             <h2>Main Menu</h2>
@@ -402,7 +385,7 @@
 <section id="view-credits" class="view">
   <div class="wrap narrow credits-roll">
     <h2>✦ Credits ✦</h2>
-    <div class="card center studio-banner"><div class="mini-logo">✦ STARBOUND ✦</div><p><strong>Light every beacon. Reclaim the sky.</strong><br><span class="muted">A BundLal Studios original</span></p>
+    <div class="card center studio-banner"><img class="banner-logo-img" src="./favicon.png" alt="STARBOUND logo" width="500" height="500"><div class="mini-logo">✦ STARBOUND ✦</div><p><strong>Light every beacon. Reclaim the sky.</strong><br><span class="muted">A BundLal Studios original</span></p>
       <div class="studio-name">BUNDLAL STUDIOS</div>
       <p class="muted"><small>Small team · Big skies</small></p>
     </div>
@@ -435,7 +418,7 @@
   <div class="wrap narrow">
     <h2>About</h2>
     <div class="card"><h3>The story</h3><p>When the <strong>Voidstar</strong> devoured the sky-lanterns, the worlds of the Aether went dim. <strong>Pip</strong>, last lantern-fox of Ember Meadow, lit one stubborn ember and set out to rekindle <strong>50 beacons</strong> across <strong>10 worlds</strong> — from Dewdrop Caverns to the Starfall Citadel.</p></div>
-    <div class="card"><h3>BundLal Studios</h3><p><strong>BundLal Studios</strong> is an indie micro-studio crafting cozy-but-challenging browser adventures. <em>STARBOUND</em> is our love letter to classic platformers — rebuilt from scratch with original characters, generative music, and a full 50-level arc.</p></div>
+    <div class="card"><h3>BundLal Studios</h3><img class="about-logo-img" src="./favicon.png" alt="STARBOUND logo" width="500" height="500"><p><strong>BundLal Studios</strong> is an indie micro-studio crafting cozy-but-challenging browser adventures. <em>STARBOUND</em> is our love letter to classic platformers — rebuilt from scratch with original characters, generative music, and a full 50-level arc.</p></div>
     <div class="card"><h3>Details</h3><p class="muted">50 levels · 10 bosses · 7 enemy species · 5 power-ups · secrets & relics · best scores/times · keyboard + touch + gamepad · offline-friendly single file deploy.</p></div>
   </div>
 </section>
@@ -445,21 +428,21 @@
 
 <footer class="footer">
   <div class="wrap foot-grid">
-    <div><strong>✦ STARBOUND</strong><br><span class="muted">Light every beacon. Reclaim the sky. · © 2026 BundLal Studios. All original content.</span></div>
+    <div><img class="foot-logo-img" src="./favicon.png" alt="STARBOUND logo" width="500" height="500"><strong>✦ STARBOUND</strong><br><span class="muted">Light every beacon. Reclaim the sky. · © 2026 BundLal Studios. All original content.</span></div>
     <div class="foot-links"><button data-nav="game">Play</button><button data-nav="levels">Levels</button><button data-nav="reviews">Reviews</button><button data-nav="howto">Guide</button><button data-nav="settings">Settings</button><button data-nav="credits">Credits</button></div>
   </div>
 </footer>
 
-<script src="js/audio.js"></script>
-<script src="js/theme.js"></script>
-<script src="js/save.js"></script>
-<script src="js/reviews-config.js"></script>
-<script src="js/reviews.js"></script>
-<script src="js/input.js"></script>
-<script src="js/levels.js"></script>
-<script src="js/engine.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/intro.js"></script>
-<script src="js/main.js"></script>
+<script src="js/audio.js?v=3"></script>
+<script src="js/theme.js?v=3"></script>
+<script src="js/save.js?v=3"></script>
+<script src="js/reviews-config.js?v=3"></script>
+<script src="js/reviews.js?v=3"></script>
+<script src="js/input.js?v=3"></script>
+<script src="js/levels.js?v=3"></script>
+<script src="js/engine.js?v=3"></script>
+<script src="js/ui.js?v=3"></script>
+<script src="js/intro.js?v=3"></script>
+<script src="js/main.js?v=3"></script>
 </body>
 </html>

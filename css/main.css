@@ -34,6 +34,7 @@
   --muted: var(--text-secondary);
   --gold: #FFC94D;
   --gold2: #FF8A3D;
+  --gold-text: #FFC94D;
   --mint: #5DF2C8;
   --sky: #4DA6FF;
   --coral: #FF6B6B;
@@ -80,6 +81,7 @@
   --hero-desc: #5F5F5F;
   --shadow: 0 12px 32px rgba(0, 0, 0, .10);
   color-scheme: light;
+  --gold-text: #8A5A00;
   --bg: var(--bg-primary);
   --bg2: var(--bg-surface);
   --panel: var(--bg-surface);
@@ -161,7 +163,7 @@ h2 small {
 }
 
 a {
-  color: var(--gold)
+  color: var(--gold-text)
 }
 
 .wrap {
@@ -473,7 +475,7 @@ kbd {
 .loader-logo {
   font-family: var(--font-d);
   font-size: 1.5rem;
-  color: var(--gold);
+  color: var(--gold-text);
   margin-bottom: 14px
 }
 
@@ -548,7 +550,7 @@ kbd {
 .brand-text em {
   font-style: normal;
   font-size: .7rem;
-  color: var(--gold);
+  color: var(--gold-text);
   letter-spacing: 2px
 }
 
@@ -677,7 +679,7 @@ kbd {
 }
 
 .eyebrow {
-  color: var(--gold);
+  color: var(--gold-text);
   letter-spacing: 3px;
   font-weight: 800;
   font-size: .85rem
@@ -736,7 +738,7 @@ kbd {
 .hero-stats strong {
   display: block;
   font-size: 1.3rem;
-  color: var(--gold)
+  color: var(--gold-text)
 }
 
 .hero-stats span {
@@ -1176,7 +1178,7 @@ body:not(.show-touch) .canvas-wrap:fullscreen #game {
   aspect-ratio: 16 / 9;
   display: block;
   image-rendering: auto;
-  background: #0B1026;
+  background: #000;
   touch-action: none
 }
 
@@ -1203,12 +1205,13 @@ body:not(.show-touch) .canvas-wrap:fullscreen #game {
 }
 
 .hud-pill {
-  background: rgba(6, 8, 24, .72);
+  background: rgba(0, 0, 0, .72);
   border: 1px solid rgba(255, 255, 255, .25);
   border-radius: 999px;
   padding: 5px 11px;
   backdrop-filter: blur(4px);
-  white-space: nowrap
+  white-space: nowrap;
+  color: #fff;
 }
 
 .hud-pill b {
@@ -1222,9 +1225,9 @@ body:not(.show-touch) .canvas-wrap:fullscreen #game {
   left: 50%;
   transform: translateX(-50%);
   z-index: 4;
-  background: rgba(6, 8, 24, .82);
+  background: rgba(0, 0, 0, .82);
   border: 1px solid rgba(255, 201, 77, .55);
-  color: var(--cream);
+  color: #fff;
   border-radius: 999px;
   padding: 6px 14px;
   font-size: .75rem;
@@ -1255,7 +1258,7 @@ body:not(.show-touch) .canvas-wrap:fullscreen #game {
   height: var(--tc-size);
   border-radius: 50%;
   border: 2px solid rgba(255, 255, 255, .35);
-  background: rgba(20, 27, 61, .55);
+  background: rgba(0, 0, 0, .55);
   color: #fff;
   font-size: calc(var(--tc-size) * .38);
   font-weight: 800;
@@ -1332,7 +1335,7 @@ body.show-touch .touch {
 }
 
 .game-acc .acc-chev {
-  color: var(--gold);
+  color: var(--gold-text);
   font-weight: 800;
   transition: transform .2s ease
 }
@@ -1403,7 +1406,7 @@ body.show-touch .touch {
 }
 
 .mini-logo {
-  color: var(--gold);
+  color: var(--gold-text);
   font-family: var(--font-d);
   letter-spacing: 3px;
   font-weight: 800
@@ -1425,7 +1428,7 @@ body.show-touch .touch {
 
 .stat-grid b {
   display: block;
-  color: var(--gold);
+  color: var(--gold-text);
   font-size: 1.2rem
 }
 
@@ -1444,7 +1447,7 @@ body.show-touch .touch {
 }
 
 .newbest {
-  color: var(--gold);
+  color: var(--gold-text);
   font-weight: 800;
   animation: pulse 1s infinite;
   margin-bottom: 8px
@@ -1563,7 +1566,7 @@ body.show-touch .touch {
 .keymap button {
   margin-left: auto;
   background: #0a0e22;
-  color: var(--gold);
+  color: var(--gold-text);
   border: 1px solid var(--gold);
   border-radius: 8px;
   padding: 6px 14px;
@@ -1578,7 +1581,7 @@ body.show-touch .touch {
 
 /* credits */
 .credits-roll .card h3 {
-  color: var(--gold);
+  color: var(--gold-text);
   margin-bottom: 2px
 }
 
@@ -1600,7 +1603,7 @@ body.show-touch .touch {
 
 .creators-title {
   text-align: center;
-  color: var(--gold);
+  color: var(--gold-text);
   font-family: var(--font-d);
   letter-spacing: 3px;
   font-size: clamp(1rem, 3.6vw, 1.25rem);
@@ -1798,7 +1801,7 @@ body.show-touch .touch {
 }
 
 .foot-links button:hover {
-  color: var(--gold)
+  color: var(--gold-text)
 }
 
 /* toast */
@@ -1843,11 +1846,11 @@ body.show-touch .touch {
   display: block;
   font-size: 2.6rem;
   font-family: var(--font-d);
-  color: var(--gold)
+  color: var(--gold-text)
 }
 
 .rev-stars {
-  color: var(--gold);
+  color: var(--gold-text);
   letter-spacing: 2px;
   font-size: 1.1rem
 }
@@ -1923,7 +1926,7 @@ body.show-touch .touch {
 }
 
 .star-pick button.lit {
-  color: var(--gold);
+  color: var(--gold-text);
   border-color: var(--gold);
   box-shadow: 0 0 14px rgba(255, 201, 77, .4);
   transform: scale(1.06)
@@ -2633,7 +2636,7 @@ kbd {
 }
 .keymap button {
   background: var(--bg-secondary);
-  color: var(--gold);
+  color: var(--gold-text);
   border-color: var(--gold);
 }
 .btn-ghost {
@@ -2727,6 +2730,65 @@ body.show-touch .canvas-wrap:fullscreen .touch {
 [data-theme="light"] .creator-card { background: #FFFFFF; }
 [data-theme="light"] .icon-btn { background: #FFFFFF; }
 [data-theme="light"] .nav-link.active { color: #2A1A00; }
+[data-theme="light"] .loader-bar { background: var(--bg-secondary); border-color: var(--border); }
+[data-theme="light"] .star-pick button { color: #888888; }
+[data-theme="light"] .star-pick button.lit { box-shadow: 0 0 14px rgba(138, 90, 0, .25); }
+[data-theme="light"] .rev-status.live { color: #0B6B4F; border-color: rgba(11, 107, 79, .5); }
+[data-theme="light"] .rev-status.stale,
+[data-theme="light"] .rev-status.error { color: #9A4A00; border-color: rgba(154, 74, 0, .45); }
+[data-theme="light"] .rev-ok { color: #0B6B4F; }
+[data-theme="light"] .rev-errors { color: #B3261E; }
+
+/* ---------- STARBOUND logo (custom favicon.png, aspect preserved) ---------- */
+.brand-logo {
+  display: block;
+  height: clamp(28px, 4.6vw, 38px);
+  width: auto;
+  max-width: clamp(140px, 26vw, 230px);
+  object-fit: contain;
+  flex: none;
+}
+.intro-logo-img {
+  width: min(440px, 80vw);
+  height: auto;
+  display: block;
+  margin: 0 auto;
+  filter: drop-shadow(0 0 26px rgba(255, 201, 77, .35));
+}
+.intro-tagline {
+  margin-top: 14px;
+  font-family: var(--font-b);
+  font-weight: 700;
+  font-size: clamp(.72rem, 2.6vw, .95rem);
+  letter-spacing: 4px;
+  color: #FFD97A;
+}
+.loader-logo-img {
+  width: min(220px, 58vw);
+  height: auto;
+  display: block;
+  margin: 0 auto 10px;
+}
+.menu-logo-img {
+  width: min(190px, 52vw);
+  height: auto;
+  display: block;
+  margin: 0 auto 8px;
+}
+.banner-logo-img {
+  width: min(250px, 62vw);
+  height: auto;
+  display: block;
+  margin: 0 auto 10px;
+}
+.foot-logo-img, .about-logo-img {
+  height: 26px;
+  width: auto;
+  max-width: 100%;
+  display: block;
+  object-fit: contain;
+}
+.about-logo-img { height: 34px; margin-bottom: 10px; }
 
 /* ---------- STARBOUND brand + theme switcher ---------- */
 .starbound-logo {
@@ -2751,7 +2813,7 @@ body.show-touch .canvas-wrap:fullscreen .touch {
 .brand-tagline {
   font-size: .72rem;
   letter-spacing: 1.6px;
-  color: var(--gold);
+  color: var(--gold-text);
   font-weight: 700;
 }
 [data-theme="light"] .brand-tagline { color: #9A6200; }
@@ -2817,4 +2879,5 @@ body.show-touch .canvas-wrap:fullscreen .touch {
 }
 @media (max-width: 480px) {
   .hero-title-starbound { letter-spacing: 1px; }
+  .brand-logo { height: 26px; max-width: 34vw; }
 }
