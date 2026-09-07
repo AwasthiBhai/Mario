@@ -1,1 +1,11 @@
-{"reviews":[]}
+{
+  "reviews": [
+    {
+      "id": "r_mtrb4fhc_3f49939a1023fe81adca518f",
+      "name": "ProbeAlex",
+      "rating": 5,
+      "text": "Two-browser verification probe A - will be removed after the test",
+      "createdAt": 1788789567072
+    }
+  ]
+}
