@@ -1533,6 +1533,13 @@ body.show-touch .touch {
   min-width: 0
 }
 
+.creator-card:only-child {
+  grid-column: 1 / -1;
+  max-width: 440px;
+  width: 100%;
+  margin-inline: auto
+}
+
 .creator-card {
   margin: 0;
   text-align: center;
