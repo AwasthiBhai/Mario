@@ -28,6 +28,12 @@
     const GROUND_Y=470;
     const width=isBoss?3400:2400+Math.floor(num*55+r()*300);
     const solids=[],coins=[],enemies=[],powerups=[],checkpoints=[],hazards=[];
+    // checkpoint columns first: plates placed below must keep these clear so
+    // no platform ever crosses a checkpoint flag (pole at x, pennant to x+44)
+    const nCp=2+Math.floor(diff*2);
+    const cpRawXs=[];
+    for(let i=1;i<=nCp;i++) cpRawXs.push((width-700)*i/(nCp+1)+200);
+    const placedPlats=[]; // non-ground solids, for overlap checks
     // continuous start ground
     let x=0;
     const segs=[];
@@ -61,7 +67,6 @@
       // glitches, springs or pixel-perfect runs. Jump physics untouched.
       const nPlat=1+Math.floor(r()*(1+diff*3));
       for(let p=0;p<nPlat;p++){
-        const px=x+20+r()*(gw2-120), py=gyC-58-r()*(22+diff*15);
         const kindRoll=r();
         let type='block';
         if(kindRoll<0.30-0.1*diff) type='block';
@@ -72,13 +77,30 @@
         else if(kindRoll<0.90) type='oneway';
         else type='hidden';
         const w=type==='oneway'?110:70+r()*70;
+        // a few candidate spots: never stack on another plate (8px pad) and
+        // never cross a checkpoint flag column; skip instead of overlapping
+        let px=0,py=0,spot=false;
+        for(let t=0;t<8&&!spot;t++){
+          px=x+20+r()*(gw2-120); py=gyC-58-r()*(22+diff*15);
+          spot=true;
+          for(const o of placedPlats){
+            if(px<o.x+o.w+8&&px+w>o.x-8&&py<o.y+o.h+8&&py+22>o.y-8){ spot=false; break; }
+          }
+          if(spot) for(const fx of cpRawXs){
+            if(px<fx+50&&px+w>fx-14){ spot=false; break; }
+          }
+        }
+        if(!spot) continue;
         const s2={x:px,y:py,w,h:22,type};
         if(type==='move'){ s2.axis=r()<0.7?'x':'y'; s2.range=s2.axis==='y'?25+r()*35:35+r()*45; s2.speed=0.7+r()*1.4+diff; s2.phase=r()*6.28; s2.ox=px; s2.oy=py; }
         if(type==='fall'){ s2.respawn=4; }
+        s2._coin=-1; // attached-coin index for later de-conflict moves
+        placedPlats.push(s2);
         solids.push(s2);
-        if(r()<0.55) coins.push({x:px+w/2,y:py-34,taken:false});
+        if(r()<0.55){ s2._coin=coins.length; coins.push({x:px+w/2,y:py-34,taken:false}); }
         if(!secretPlaced&&r()<0.10&&type==='hidden'){ // secret cache above hidden block
-          secretPlaced=true; // standing on the revealed block (jump ≈115px),
+          secretPlaced=true; s2._secret=true; // secret carriers never move
+          // standing on the revealed block (jump ≈115px),
           // both the coins and the gift stay comfortably in reach
           for(let k=0;k<5;k++) coins.push({x:px-40+k*26,y:py-80,taken:false,secret:true});
           powerups.push({x:px+w/2,y:py-95,kind:pick(r,['shield','heart','star']),secret:true,taken:false});
@@ -104,9 +126,75 @@
       }
       x+=gw2;
     }
-    // checkpoints every ~quarter
-    const nCp=2+Math.floor(diff*2);
-    for(let i=1;i<=nCp;i++){ const px2=(width-700)*i/(nCp+1)+200; checkpoints.push({x:px2,y:0,on:false}); }
+    // checkpoints every ~quarter, snapped to safe ground: supported stance,
+    // clear of hazards and plates, inside the world and off the goal / boss
+    // approach — so flags never float over holes and respawns never loop
+    function stanceTop(px){
+      let best=null;
+      for(const s of solids){ if(s.type!=='ground') continue; if(px>=s.x&&px<=s.x+s.w&&(best===null||s.y<best)) best=s.y; }
+      return best;
+    }
+    function boxHitsHazard(bx,by,bw,bh){
+      for(const h of hazards){ if(bx<h.x+h.w&&bx+bw>h.x&&by<h.y+h.h&&by+bh>h.y) return true; }
+      return false;
+    }
+    function plateCrossesFlag(px,gy){
+      for(const s of placedPlats){ if(px<s.x+s.w+14&&px+50>s.x-14&&gy-118<s.y+s.h&&gy>s.y) return true; }
+      return false;
+    }
+    function snapCheckpoint(x0){
+      const lo=isBoss?60:40, hi=isBoss?width-760:width-320;
+      const okX=x=>x>=lo&&x<=hi;
+      const good=x=>{
+        if(!okX(x)) return false;
+        const gy=stanceTop(x); if(gy===null) return false;
+        if(boxHitsHazard(x-14,gy-42,28,42)) return false;
+        if(plateCrossesFlag(x,gy)) return false;
+        return true;
+      };
+      if(good(x0)) return x0;
+      for(let d=20;d<=260;d+=20){ if(good(x0-d)) return x0-d; if(good(x0+d)) return x0+d; }
+      // fallback: supported + hazard-clear even if a plate is near, else clamp
+      const sup=x=>{ if(!okX(x)) return false; const gy=stanceTop(x); return gy!==null&&!boxHitsHazard(x-14,gy-42,28,42); };
+      if(sup(x0)) return x0;
+      for(let d=20;d<=400;d+=20){ if(sup(x0-d)) return x0-d; if(sup(x0+d)) return x0+d; }
+      return Math.max(lo,Math.min(hi,x0));
+    }
+    for(let i=0;i<cpRawXs.length;i++){ checkpoints.push({x:snapCheckpoint(cpRawXs[i]),y:0,on:false}); }
+    // resolve leftover flag/plate crossings by shifting the plate itself (with
+    // its attached coin, same height, so reachability never changes) or, with
+    // no room, dropping that one plate+coin. Secret carriers never move and
+    // flags stay on their safe snapped ground.
+    for(const c of checkpoints){
+      const gy=stanceTop(c.x); if(gy===null) continue;
+      for(let pi=placedPlats.length-1;pi>=0;pi--){
+        const s=placedPlats[pi];
+        if(!(c.x<s.x+s.w+14&&c.x+50>s.x-14&&gy-118<s.y+s.h&&gy>s.y)) continue;
+        if(s._secret) continue;
+        const hitsFlag=(nx,w2)=>{ for(const c2 of checkpoints){ const fx=c2.x; if(nx<fx+50&&nx+w2>fx-14) return true; } return false; };
+        let done=false;
+        for(const dir of [-1,1]){
+          for(let d=20;d<=140&&!done;d+=20){
+            const nx=s.x+dir*d;
+            if(nx<20||nx+s.w>width-40) continue;
+            let clash=false;
+            for(const o of placedPlats){ if(o===s) continue; if(nx<o.x+o.w+8&&nx+s.w>o.x-8&&s.y<o.y+o.h+8&&s.y+22>o.y-8){ clash=true; break; } }
+            if(clash||hitsFlag(nx,s.w)) continue;
+            s.x=nx;
+            if(s.type==='move') s.ox=nx;
+            if(s._coin>=0&&coins[s._coin]) coins[s._coin].x=nx+s.w/2;
+            done=true;
+          }
+          if(done) break;
+        }
+        if(!done){
+          const si=solids.indexOf(s); if(si>=0) solids.splice(si,1);
+          if(s._coin>=0){ coins.splice(s._coin,1); for(const o of placedPlats) if(o._coin>s._coin) o._coin--; }
+          placedPlats.splice(pi,1);
+        }
+      }
+    }
+    for(const s of placedPlats){ delete s._secret; delete s._coin; }
     // powerups: snapped 70px above the actual ground beneath them, so every
     // gift is collectible with a normal jump (jump height ≈115px)
     function groundTopAtX(px){

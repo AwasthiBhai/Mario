@@ -204,9 +204,32 @@
        never materialize inside a wall or in mid-air. */
     sanitizeCheckpoint(cp){
       const w=this.level?this.level.width:3000;
-      const x=Math.max(20,Math.min(w-40,cp.x));
+      let x=Math.max(20,Math.min(w-40,cp.x));
       let y=isFinite(cp.y)?cp.y:440;
       y=Math.max(60,Math.min(560,y));
+      // relocate onto supported ground: groundTopAt() defaults to 470 over
+      // gaps, which used to materialize respawns above holes (fall straight
+      // back down -> hurt -> respawn -> fall = death loop). Scan nearby for
+      // the closest stance with real ground under it and no hazard in it.
+      const sup=xx=>{
+        if(!this.level) return null;
+        let top=null;
+        for(const s of this.level.solids){ if(s.gone||s.type!=='ground') continue; if(xx>=s.x&&xx<=s.x+s.w&&(top===null||s.y<top)) top=s.y; }
+        return top;
+      };
+      const clear=(xx,gy)=>{
+        const L=this.level; if(!L||gy===null) return false;
+        for(const h of (L.hazards||[])){ if(xx-14<h.x+h.w&&xx+14>h.x&&gy-42<h.y+h.h&&gy>h.y) return false; }
+        return true;
+      };
+      if(sup(x)===null||!clear(x,sup(x))){
+        for(let d=20;d<=240;d+=20){
+          if(x-d>=20&&sup(x-d)!==null&&clear(x-d,sup(x-d))){ x=x-d; break; }
+          if(x+d<=w-40&&sup(x+d)!==null&&clear(x+d,sup(x+d))){ x=x+d; break; }
+        }
+        // else keep x (previous behavior) — level data now snaps flags away
+        // from holes, so this is only a last-resort fallback
+      }
       const gy=this.level?this.groundTopAt(x):470;
       // rest just above the ground, but never above where the player stood
       y=Math.min(y,gy-44);
