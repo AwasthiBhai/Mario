@@ -5,14 +5,16 @@
    finishing always lands in the silent 'website' audio state. */
 (function(global){
   'use strict';
-  // pure timeline map (testable): cinematic seconds -> phase index
+  // pure timeline map (testable): cinematic seconds -> phase index.
+  // Total runtime is ~10s: every threshold below is scaled from the original
+  // ~14.6s cut so all phases keep their relative pacing and visuals.
   function phaseAt(t){
-    if(t<1.6) return 0;
-    if(t<2.4) return 1;
-    if(t<5.6) return 2; // studio visible (with hold)
-    if(t<6.8) return 4;
-    if(t<10.2) return 5;
-    if(t<13.2) return 6; // logo visible (with hold)
+    if(t<1.1) return 0;
+    if(t<1.6) return 1;
+    if(t<3.8) return 2; // studio visible (with hold)
+    if(t<4.7) return 4;
+    if(t<7.0) return 5;
+    if(t<9.0) return 6; // logo visible (with hold)
     return 8;
   }
   const Intro={
@@ -35,6 +37,7 @@
     resize(){ if(this.el&&this.cv){ this.cv.width=this.el.clientWidth||960; this.cv.height=this.el.clientHeight||540; } },
     reduced(){ return !!(global.SP_Save&&global.SP_Save.data.settings.reducedMotion); },
     play(){
+      cancelAnimationFrame(this.raf); // never stack two cinematic loops
       this.done=false; this.skipped=false; this.t=0; this._loopErr=false;
       this._s1=this._s2=this._s3=this._s4=false;
       document.getElementById('introSkip').classList.remove('hidden');
@@ -86,10 +89,10 @@
       c.save();
       // subtle cinematic push-in (camera slowly entering the world)
       if(!rm){
-        const z=1+Math.min(0.09,t*0.006);
-        c.translate(W/2,H/2); c.scale(z,z); c.translate(-W/2,-H/2+Math.min(14,t*1.1));
+        const z=1+Math.min(0.09,t*0.009);
+        c.translate(W/2,H/2); c.scale(z,z); c.translate(-W/2,-H/2+Math.min(14,t*1.6));
       }
-      const worldA=this.smooth((t-6.4)/2.2); // world reveal alpha
+      const worldA=this.smooth((t-4.5)/2.0); // world reveal alpha
       if(worldA>0) this.drawWorld(c,W,H,t,worldA);
       else { this.drawFog(c,W,H,t,1); this.drawGlow(c,W,H,t); }
       if(worldA>0&&worldA<1){ this.drawFog(c,W,H,t,1-worldA); }
@@ -101,7 +104,7 @@
     },
     smooth(x){ x=Math.max(0,Math.min(1,x)); return x*x*(3-2*x); },
     drawGlow(c,W,H,t){
-      const g=this.smooth((t-1.6)/1.8);
+      const g=this.smooth((t-1.1)/1.2);
       if(g<=0) return;
       const gr=c.createRadialGradient(W/2,H*0.55,10,W/2,H*0.55,Math.max(W,H)*0.7);
       gr.addColorStop(0,'rgba(255,180,80,'+(0.4*g)+')');
@@ -109,8 +112,8 @@
       gr.addColorStop(1,'rgba(0,0,0,0)');
       c.fillStyle=gr; c.fillRect(-W*0.1,-H*0.1,W*1.2,H*1.2);
       // slow light sweep across the studio title
-      if(!this.reduced()&&t>2.4&&t<6.8){
-        const sx=W*((t-2.4)/4.4);
+      if(!this.reduced()&&t>1.6&&t<4.7){
+        const sx=W*((t-1.6)/3.1);
         const sw=c.createLinearGradient(sx-140,0,sx+140,0);
         sw.addColorStop(0,'rgba(255,240,200,0)'); sw.addColorStop(0.5,'rgba(255,240,200,'+(0.10*g)+')'); sw.addColorStop(1,'rgba(255,240,200,0)');
         c.fillStyle=sw; c.fillRect(0,0,W,H);
@@ -216,7 +219,7 @@
       c.lineTo(W*1.1,base+80); c.closePath(); c.fill(); c.restore();
     },
     drawBurst(c,W,H,t){
-      const k=this.smooth((t-10.2)/1.1);
+      const k=this.smooth((t-7.0)/0.8);
       if(k<=0||k>=1) return;
       const r=(1-k);
       const g=c.createRadialGradient(W/2,H*0.42,10,W/2,H*0.42,Math.max(W,H)*0.6);
@@ -235,11 +238,11 @@
     },
     timeline(){
       const studio=document.getElementById('introStudio'), logo=document.getElementById('introLogo');
-      if(this.t>2.4&&!this._s1){ this._s1=true; studio.classList.add('show'); try{global.SP_Audio.sfx('sting');}catch(e){} }
-      if(this.t>5.6&&!this._s2){ this._s2=true; studio.classList.add('hide'); }
-      if(this.t>6.8&&!this._s3){ this._s3=true; studio.classList.add('hidden'); logo.classList.remove('hidden'); }
-      if(this.t>10.2&&!this._s4){ this._s4=true; const l2=document.getElementById('introLogo'); requestAnimationFrame(()=>l2.classList.add('show')); try{global.SP_Audio.sfx('sting'); global.SP_Audio.sfx('whoosh');}catch(e){} }
-      if(this.t>14.6){ this.finish(false); }
+      if(this.t>1.6&&!this._s1){ this._s1=true; studio.classList.add('show'); try{global.SP_Audio.sfx('sting');}catch(e){} }
+      if(this.t>3.8&&!this._s2){ this._s2=true; studio.classList.add('hide'); }
+      if(this.t>4.7&&!this._s3){ this._s3=true; studio.classList.add('hidden'); logo.classList.remove('hidden'); }
+      if(this.t>7.0&&!this._s4){ this._s4=true; const l2=document.getElementById('introLogo'); requestAnimationFrame(()=>l2.classList.add('show')); try{global.SP_Audio.sfx('sting'); global.SP_Audio.sfx('whoosh');}catch(e){} }
+      if(this.t>10.0){ this.finish(false); }
     },
     skip(){ if(this.done) return; this.finish(true); },
     replay(){

@@ -20,6 +20,7 @@
       $('#qTouch').addEventListener('change',e=>{ SP_Save.data.settings.touch=e.target.checked; SP_Save.write(); this.fitTouch(); });
       $('#qMotion').addEventListener('change',e=>{ SP_Save.data.settings.reducedMotion=e.target.checked; SP_Save.write(); SP_Engine.settings.reducedMotion=e.target.checked; });
       $('#btnPauseTop').addEventListener('click',()=>this.togglePause());
+      const pauseHud=$('#btnPauseHud'); if(pauseHud) pauseHud.addEventListener('click',()=>this.togglePause());
       $('#btnMuteGame').addEventListener('click',e=>{ const s=SP_Save.data.settings; s.muted=!s.muted; SP_Save.write(); SP_Audio.setVolumes(s); e.target.textContent=s.muted?'🔇':'🔊'; $('#hdrMute').textContent=s.muted?'🔇':'🔊'; });
       $('#hdrMute').addEventListener('click',e=>{ const s=SP_Save.data.settings; s.muted=!s.muted; SP_Save.write(); SP_Audio.setVolumes(s); e.target.textContent=s.muted?'🔇':'🔊'; $('#btnMuteGame').textContent=s.muted?'🔇':'🔊'; });
       $('#btnFull').addEventListener('click',()=>this.fullscreen());

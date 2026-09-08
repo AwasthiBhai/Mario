@@ -1285,6 +1285,26 @@ body.playing .canvas-wrap .touch {
   color: var(--gold)
 }
 
+/* In-viewport pause button: lives inside #canvasWrap (the fullscreen
+   element), so it stays visible and clickable in fullscreen on desktop,
+   mobile portrait and landscape. Overlays (z-index 5) still open above it,
+   so the open menu always receives input. Never hidden responsively. */
+.hud-btn {
+  pointer-events: auto;
+  cursor: pointer;
+  font: inherit;
+  min-width: 34px;
+  min-height: 28px;
+}
+
+.hud-btn:hover {
+  border-color: var(--gold);
+}
+
+.hud-btn:active {
+  transform: scale(.94);
+}
+
 /* non-blocking orientation hint */
 .rotate-chip {
   position: absolute;
