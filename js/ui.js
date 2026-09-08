@@ -9,7 +9,7 @@
     suspended:false, reviewRating:0,
     init(){
       try{ if(global.SP_Theme&&SP_Theme.init) SP_Theme.init(); }catch(e){}
-      this.bindNav(); this.bindActions(); this.bindSettings(); this.bindReviews(); this.bindTheme();
+      this.bindNav(); this.bindActions(); this.bindSettings(); this.bindReviews(); this.bindTheme(); this._bindConfirm();
       this.renderWorldsHome(); this.renderLevelSelect(); this.refreshHero(); this.applySettingsToDom(); this.renderReviews(); this.renderShop();
       window.addEventListener('resize',()=>this.fitTouch());
       window.addEventListener('orientationchange',()=>{ this.fitTouch(); if(global.SP_Engine&&SP_Engine.fitCanvas) SP_Engine.fitCanvas(); });
@@ -73,6 +73,7 @@
       try{ if(global.SP_Theme&&SP_Theme.syncControls) SP_Theme.syncControls(); }catch(e){}
     },
     onKeyDown(code){
+      if(this._confirmOpen) return; // modal owns Escape; never toggle pause under it
       if(code==='Escape'||code==='KeyP'){
         if(this.isMobileNavOpen()){ this.toggleMobileNav(false); return; }
         this.togglePause();
@@ -154,7 +155,7 @@
         if(SP_Save.completedCount()===0&&SP_Save.data.maxUnlocked<=1) this.toast('No saved adventure yet — starting Level 1!');
         this.startLevel(this.highestPlayable());
       }
-      if(a==='newgame'){ if(confirm('Start a NEW GAME? Progress resets (settings are kept).')){ const keepSet=SP_Save.data.settings, keepIntro=SP_Save.data.introSeen; SP_Save.reset(); SP_Save.data.settings=keepSet; SP_Save.data.introSeen=keepIntro; SP_Save.write(); this.carryScore=0; this.renderLevelSelect(); this.refreshHero(); this.startLevel(1); } }
+      if(a==='newgame'){ this.confirmDialog({title:'Start a new game?',message:'Progress resets (settings are kept).',okText:'Start over'}).then(ok=>{ if(!ok) return; const keepSet=SP_Save.data.settings, keepIntro=SP_Save.data.introSeen; SP_Save.reset(); SP_Save.data.settings=keepSet; SP_Save.data.introSeen=keepIntro; SP_Save.write(); this.carryScore=0; this.renderLevelSelect(); this.refreshHero(); this.startLevel(1); }); }
       if(a==='resume'){ this.togglePause(false); }
       if(a==='restart'){ this.hideOverlays(); SP_Engine.setPaused(false); this.paused=false; this.suspended=false; SP_Audio.setState('resumed'); this.startLevel(this.currentLevel,true); }
       if(a==='powershop'){ this.showPauseShop(true); }
@@ -220,6 +221,51 @@
       },2600);
     },
     toast(msg){ this.notify(msg,'info'); }, // back-compat alias for older callers
+    /* Blocking-style confirm dialog (replaces confirm()): explicit buttons
+       only — no timeouts, no Enter shortcut, Escape/backdrop = cancel, and the
+       game state is never touched by the dialog itself. Resolves true only on
+       an explicit Confirm click. The single node is moved into #canvasWrap
+       while the game itself is fullscreened so it stays visible. */
+    confirmDialog(opts){
+      opts=opts||{};
+      const modal=$('#confirmModal');
+      const title=$('#confirmTitle'), msg=$('#confirmMsg');
+      const okBtn=$('#confirmOk'), cancelBtn=$('#confirmCancel');
+      if(!modal||!title||!msg||!okBtn||!cancelBtn) return Promise.resolve(false);
+      if(this._confirmResolve) this._finishConfirm(false); // never stack: prior request cancels
+      title.textContent=opts.title||'Are you sure?';
+      msg.textContent=opts.message||'';
+      okBtn.textContent=opts.okText||'Confirm';
+      cancelBtn.textContent=opts.cancelText||'Cancel';
+      try{
+        const wrap=document.getElementById('canvasWrap');
+        const fs=document.fullscreenElement;
+        const host=(fs&&wrap&&(fs===wrap||(wrap.contains&&wrap.contains(fs))))?wrap:document.body;
+        if(host&&modal.parentNode!==host) host.appendChild(modal);
+      }catch(e){}
+      this._confirmOpen=true;
+      modal.classList.remove('hidden');
+      try{ cancelBtn.focus(); }catch(e){} // safe default: keyboard lands on Cancel
+      return new Promise(resolve=>{ this._confirmResolve=resolve; });
+    },
+    _finishConfirm(val){
+      const modal=$('#confirmModal');
+      this._confirmOpen=false;
+      const r=this._confirmResolve; this._confirmResolve=null;
+      try{ if(modal) modal.classList.add('hidden'); }catch(e){}
+      if(r) r(!!val);
+    },
+    _bindConfirm(){
+      if(this._confirmBound) return; this._confirmBound=true;
+      const modal=$('#confirmModal'); if(!modal) return;
+      const okBtn=$('#confirmOk'), cancelBtn=$('#confirmCancel');
+      if(okBtn) okBtn.addEventListener('click',()=>this._finishConfirm(true));
+      if(cancelBtn) cancelBtn.addEventListener('click',()=>this._finishConfirm(false));
+      modal.addEventListener('click',e=>{ if(e.target===modal) this._finishConfirm(false); });
+      // capture-phase: runs before gameplay input so Escape cancels instead of pausing
+      this._confirmKeyH=e=>{ if(e&&(e.code==='Escape'||e.code==='Esc')&&this._confirmOpen){ try{e.preventDefault(); e.stopPropagation();}catch(err){} this._finishConfirm(false); } };
+      document.addEventListener('keydown',this._confirmKeyH,true);
+    },
     /* Touch capable? coarse pointer OR multi-touch points OR legacy touch event
        OR an observed first touch (hybrid laptops). Desktop keyboard/mouse: false. */
     isTouchDevice(){
@@ -503,7 +549,7 @@
       if(list) list.addEventListener('click',e=>{
         const btn=e.target.closest?e.target.closest('[data-del-legacy]'):null;
         if(!btn) return;
-        if(confirm('Delete this device-only review?')){ SP_Reviews.legacyRemove(btn.getAttribute('data-del-legacy')); this.renderReviews(); }
+        this.confirmDialog({title:'Delete review?',message:'This removes the review stored on this device.',okText:'Delete'}).then(ok=>{ if(!ok) return; SP_Reviews.legacyRemove(btn.getAttribute('data-del-legacy')); this.renderReviews(); });
       });
     },
     _stars(n){
@@ -589,7 +635,7 @@
       $('#setTouch').addEventListener('change',e=>{ const v=e.target.checked, st=s(); st.touch=v; st.touchOff=!v; SP_Save.write(); this._syncTouchChecks(); this.fitTouch(); });
       $('#btnFullscreen').addEventListener('click',()=>this.fullscreen());
       $('#btnReplayIntro').addEventListener('click',()=>{ SP_Intro.replay(); });
-      $('#btnResetSave').addEventListener('click',()=>{ if(confirm('Reset ALL progress and settings?')){ SP_Save.reset(); SP_Save.write(); this.carryScore=0; this.applySettingsToDom(); this.renderLevelSelect(); this.refreshHero(); this.renderReviews(); this.notify('Progress wiped. Fresh adventure awaits!','success'); } });
+      $('#btnResetSave').addEventListener('click',()=>{ this.confirmDialog({title:'Reset all progress?',message:'Unlocks, scores, coins, relics and settings are wiped.',okText:'Reset everything'}).then(ok=>{ if(!ok) return; SP_Save.reset(); SP_Save.write(); this.carryScore=0; this.applySettingsToDom(); this.renderLevelSelect(); this.refreshHero(); this.renderReviews(); this.notify('Progress wiped. Fresh adventure awaits!','success'); }); });
       $('#btnResetKeys').addEventListener('click',()=>{ s().keys=null; SP_Input.map=Object.assign({},SP_Input.map={left:'KeyA',right:'KeyD',jump:'Space',down:'KeyS',run:'ShiftLeft',action:'KeyE',pause:'Escape',altJump:'KeyW'}); SP_Save.write(); this.renderKeymap(); });
     },
     renderKeymap(){

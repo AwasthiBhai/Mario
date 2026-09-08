@@ -1953,6 +1953,34 @@ body.show-touch .touch {
   max-width: calc(100% - 24px)
 }
 
+/* blocking confirm dialog (replaces confirm()): viewport-fixed and moved
+   into #canvasWrap while the game itself is fullscreened, so it stays
+   visible everywhere. Reuses .panel/.btn styling; Cancel is the safe focus. */
+.confirm-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(0, 0, 0, .72);
+  pointer-events: auto
+}
+
+.confirm-modal .panel {
+  width: 100%;
+  max-width: 420px
+}
+
+.confirm-modal .muted {
+  overflow-wrap: anywhere
+}
+
+[data-theme="light"] .confirm-modal {
+  background: rgba(17, 17, 17, .45)
+}
+
 /* reviews */
 #revSummary {
   display: grid;
