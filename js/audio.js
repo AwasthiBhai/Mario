@@ -8,6 +8,10 @@
     settings:{master:80,music:70,sfx:80,muted:false},
     musicTimer:null, musicStep:0, musicKind:null, started:false,
     state:'boot', ducked:false, _wantMusic:null,
+    /* Custom gameplay song: ONE reusable HTMLAudio element, looped by the
+       browser. Created lazily on first gameplay start so there is never a
+       duplicate instance, never a restart gap from recreation. */
+    _songEl:null, _songSrc:'audio/MarioSong.mp3',
     init(settings){
       if(settings) Object.assign(this.settings, settings);
       const AC = (typeof window!=='undefined')&&(window.AudioContext||window.webkitAudioContext);
@@ -35,11 +39,61 @@
     },
     setVolumes(s){
       Object.assign(this.settings,s); this.applyVolumes();
+      // Custom song respects the same master/music/mute settings.
+      try{ if(this._songEl) this._songEl.volume=this._songVolume(); }catch(e){}
       // if user unmutes mid-gameplay, (re)start the wanted music; if muted, silence now
       try{
         if(this.settings.muted){ this._ramp(this.fadeGain.gain,0,0.15); }
-        else if(this._wantMusic&&!this.musicTimer&&this.ctx){ this._startSequencer(this._wantMusic); this._ramp(this.fadeGain.gain,1,1.0); }
+        else if(this._wantMusic&&!this.musicTimer&&this.ctx){
+          // Gameplay states use the MarioSong file, never the sequencer:
+          // restarting the sequencer here would stack two songs.
+          if(typeof this._wantMusic==='string'&&(this._wantMusic.indexOf('world')===0||this._wantMusic==='boss')){
+            this._ramp(this.fadeGain.gain,0.0001,0.4);
+          }
+          else { this._startSequencer(this._wantMusic); this._ramp(this.fadeGain.gain,1,1.0); }
+        }
       }catch(e){}
+    },
+    /* ------- Custom gameplay song (MarioSong.mp3, gameplay only) -------
+       ONE reusable Audio object, browser-looped. Idempotent play/pause so
+       level changes, fullscreen, rotation and restarts can never stack or
+       restart it. Position is never reset (no currentTime=0) except never. */
+    _ensureSong(){
+      if(this._songEl) return this._songEl;
+      try{
+        if(typeof Audio==='undefined') return null;
+        const a=new Audio();
+        a.src=this._songSrc;
+        a.loop=true;
+        a.preload='auto';
+        try{ a.volume=this._songVolume(); }catch(e){}
+        try{ a.addEventListener('error',function(){}); }catch(e){}
+        this._songEl=a;
+      }catch(e){ return null; }
+      return this._songEl;
+    },
+    _songVolume(){
+      try{
+        if(this.settings.muted) return 0;
+        const m=(this.settings.master==null?80:this.settings.master)/100;
+        const mu=(this.settings.music==null?70:this.settings.music)/100;
+        return Math.max(0,Math.min(1,m*mu));
+      }catch(e){ return 0.7; }
+    },
+    songPlay(){
+      const el=this._ensureSong();
+      if(!el) return;
+      try{ el.volume=this._songVolume(); }catch(e){}
+      try{
+        // Already playing -> do nothing (no restart, no duplicate).
+        if(el.paused){
+          const pr=el.play();
+          if(pr&&pr.catch) pr.catch(function(){});
+        }
+      }catch(e){}
+    },
+    songPause(){
+      try{ const el=this._songEl; if(el&&!el.paused) el.pause(); }catch(e){}
     },
     _ramp(param,v,secs){
       if(!this.ctx) return;
@@ -58,31 +112,53 @@
     setState(state,data){
       data=data||{};
       this.state=state;
-      if(!this.ctx||this.disabled){ this._wantMusicFor(state,data); if(state==='paused') this.ducked=true; if(state==='resumed') this.ducked=false; return; }
+      if(!this.ctx||this.disabled){
+        this._wantMusicFor(state,data);
+        if(state==='paused') this.ducked=true; if(state==='resumed') this.ducked=false;
+        // Gameplay-only song applies even headless (safe no-ops without Audio).
+        try{
+          if(state==='level'||state==='boss'||state==='resumed') this.songPlay();
+          else this.songPause();
+        }catch(e){}
+        return;
+      }
       this.resume();
       switch(state){
         case 'intro':
-          this._wantMusic='intro'; this._playKind('intro',1.5); break;
+          this._wantMusic='intro'; this.songPause(); this._playKind('intro',1.5); break;
         case 'website':
-          this._wantMusic=null; this.stopMusic(0.6); this.duck(false); break;
+          this._wantMusic=null; this.songPause(); this.stopMusic(0.6); this.duck(false); break;
         case 'level': {
+          // Custom gameplay music replaces the generative sequencer so two
+          // songs never overlap. songPlay() is idempotent: level changes and
+          // restarts continue the same loop without restarting from 0.
           const kind='world'+(data.world||0);
-          this._wantMusic=kind; this._playKind(kind,1.4); this.duck(false); break;
+          this._wantMusic=kind;
+          this.stopTimerOnly();
+          if(this.fadeGain) this._ramp(this.fadeGain.gain,0.0001,0.4);
+          this.duck(false); this.songPlay(); break;
         }
         case 'boss':
-          this._wantMusic='boss'; this._playKind('boss',0.9); this.duck(false); break;
+          // Boss arenas stay inside gameplay: continue the same loop.
+          this._wantMusic='boss';
+          this.stopTimerOnly();
+          if(this.fadeGain) this._ramp(this.fadeGain.gain,0.0001,0.4);
+          this.duck(false); this.songPlay(); break;
         case 'paused':
-          this.duck(true); break;
+          // Pause retains position; resume continues (never restarts from 0).
+          this.duck(true); this.songPause(); break;
         case 'resumed':
-          this.duck(false); break;
+          this.duck(false); this.songPlay(); break;
         case 'complete':
-          this._wantMusic=null; this.stopMusic(0.8); this.jingle('victory'); break;
+          // Level-complete overlay: pause (retain time) + jingle; the next
+          // level resumes the same loop without restarting.
+          this._wantMusic=null; this.stopMusic(0.8); this.jingle('victory'); this.songPause(); break;
         case 'gameover':
-          this._wantMusic=null; this.stopMusic(0.8); this.jingle('gameover'); break;
+          this._wantMusic=null; this.stopMusic(0.8); this.jingle('gameover'); this.songPause(); break;
         case 'ending':
-          this._wantMusic='ending'; this._playKind('ending',1.6); break;
+          this._wantMusic='ending'; this.songPause(); this._playKind('ending',1.6); break;
         default:
-          this._wantMusic=null; this.stopMusic(0.6);
+          this._wantMusic=null; this.songPause(); this.stopMusic(0.6);
       }
     },
     _wantMusicFor(state,data){
