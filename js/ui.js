@@ -641,7 +641,7 @@
       // which means defaults). Without this the keymap UI would show stale
       // remaps after a wipe until reload.
       try{
-        if(!s.keys){ if(SP_Input.resetToDefaults) SP_Input.resetToDefaults(); else SP_Input.map=Object.assign({},SP_Input.DEFAULTS||{left:'KeyA',right:'KeyD',jump:'Space',down:'KeyS',run:'ShiftLeft',action:'KeyE',pause:'Escape',altJump:'KeyW'}); }
+        if(!s.keys){ if(SP_Input.resetToDefaults) SP_Input.resetToDefaults(); else SP_Input.map=Object.assign({},SP_Input.DEFAULTS||{left:'KeyA',right:'KeyD',jump:'Space',run:'ShiftLeft',pause:'Escape',altJump:'KeyW'}); }
         else SP_Input.loadMap(s.keys);
       }catch(e){}
       this.renderKeymap();
@@ -658,10 +658,10 @@
       $('#btnFullscreen').addEventListener('click',()=>this.fullscreen());
       $('#btnReplayIntro').addEventListener('click',()=>{ SP_Intro.replay(); });
       $('#btnResetSave').addEventListener('click',()=>{ this.confirmDialog({title:'Reset all progress?',message:'Unlocks, scores, coins, relics and settings are wiped.',okText:'Reset everything'}).then(ok=>{ if(!ok) return; SP_Save.reset(); SP_Save.write(); try{ if(SP_Input.resetToDefaults) SP_Input.resetToDefaults(); }catch(e){} this.carryScore=0; this.applySettingsToDom(); this.renderLevelSelect(); this.refreshHero(); this.renderReviews(); this.notify('Progress wiped. Fresh adventure awaits!','success'); }); });
-      $('#btnResetKeys').addEventListener('click',()=>{ const D=(SP_Input.DEFAULTS||{left:'KeyA',right:'KeyD',jump:'Space',down:'KeyS',run:'ShiftLeft',action:'KeyE',pause:'Escape',altJump:'KeyW'}); s().keys=null; if(SP_Input.resetToDefaults) SP_Input.resetToDefaults(); else SP_Input.map=Object.assign({},D); SP_Save.write(); this.renderKeymap(); });
+      $('#btnResetKeys').addEventListener('click',()=>{ const D=(SP_Input.DEFAULTS||{left:'KeyA',right:'KeyD',jump:'Space',run:'ShiftLeft',pause:'Escape',altJump:'KeyW'}); s().keys=null; if(SP_Input.resetToDefaults) SP_Input.resetToDefaults(); else SP_Input.map=Object.assign({},D); SP_Save.write(); this.renderKeymap(); });
     },
     renderKeymap(){
-      const labels={left:'Move left',right:'Move right',jump:'Jump',down:'Crouch',run:'Run',action:'Action',pause:'Pause'};
+      const labels={left:'Move left',right:'Move right',jump:'Jump',run:'Run',pause:'Pause'};
       const pretty=(SP_Input&&SP_Input.prettyCode)?SP_Input.prettyCode:(c=>(c||'').replace('Key',''));
       const km=$('#keymap'); km.innerHTML='';
       for(const k in labels){

@@ -1,7 +1,7 @@
 /* STARBOUND — Input: keyboard (remappable) + touch + gamepad */
 (function(global){
   'use strict';
-  const DEFAULTS={left:'KeyA',right:'KeyD',jump:'Space',down:'KeyS',run:'ShiftLeft',action:'KeyE',pause:'Escape',altJump:'KeyW'};
+  const DEFAULTS={left:'KeyA',right:'KeyD',jump:'Space',run:'ShiftLeft',pause:'Escape',altJump:'KeyW'};
   /* Normalize a keyboard event to its engine code (event.code based).
      Handles legacy names (Esc/Spacebar) and falls back to event.key when
      event.code is missing. Display names are NEVER used as codes. */
@@ -67,8 +67,8 @@
   }
   const Input={
     keys:{}, pressed:{}, map:Object.assign({},DEFAULTS),
-    touch:{left:false,right:false,jump:false,action:false},
-    joy:{x:0,jump:false,action:false,pause:false},
+    touch:{left:false,right:false,jump:false},
+    joy:{x:0,jump:false,pause:false},
     enabled:true,
     DEFAULTS:DEFAULTS, normCode:normCode, prettyCode:prettyCode, isShiftCode:isShiftCode, storedToCode:storedToCode,
     loadMap(custom){ if(custom) for(const k in DEFAULTS) if(custom[k]&&typeof custom[k]==='string') this.map[k]=storedToCode(normCode(custom[k],null)); },
@@ -98,7 +98,7 @@
         if(global.SP_UI&&global.SP_UI.onKeyDown) global.SP_UI.onKeyDown(code);
       });
       window.addEventListener('keyup',e=>{ const code=normCode(e.code,e.key); this.keys[code]=false; });
-      window.addEventListener('blur',()=>{ this.keys={}; this.touch={left:false,right:false,jump:false,action:false}; });
+      window.addEventListener('blur',()=>{ this.keys={}; this.touch={left:false,right:false,jump:false}; });
       // touch buttons
       document.querySelectorAll('#touch [data-t]').forEach(btn=>{
         const k=btn.getAttribute('data-t');
@@ -122,7 +122,7 @@
       }
     },
     pollGamepad(){
-      this.joy={x:0,jump:false,action:false,pause:false};
+      this.joy={x:0,jump:false,pause:false};
       try{
         const gps=navigator.getGamepads?navigator.getGamepads():[];
         for(const gp of gps){
@@ -133,7 +133,6 @@
           if(gp.buttons[15]&&gp.buttons[15].pressed) this.joy.x=1;
           const b=i=>gp.buttons[i]&&gp.buttons[i].pressed;
           if(b(0)||b(1)) this.joy.jump=true;
-          if(b(2)||b(3)||b(5)||b(7)) this.joy.action=true;
           if(b(9)){ if(!this._gpPauseHeld){ this.joy.pause=true; this._gpPauseHeld=true; } }
           else this._gpPauseHeld=false;
           break;
@@ -149,16 +148,14 @@
         if(this.keys['ShiftLeft']||this.keys['ShiftRight']||this.keys['Shift']) return true;
       } else if(this.keys[c]) return true;
       // Fixed movement alternates (not remappable, always available):
-      // arrows for directions + W as alt-jump. Run/Action/Pause have NO hidden
+      // arrows for directions + W as alt-jump. Run/Pause have NO hidden
       // alternates — they use ONLY the saved mapping (+ touch/gamepad below).
       if(action==='left'&&(this.keys['ArrowLeft'])) return true;
       if(action==='right'&&(this.keys['ArrowRight'])) return true;
       if(action==='jump'&&(this.keys['ArrowUp']||this.keys[this.map.altJump])) return true;
-      if(action==='down'&&(this.keys['ArrowDown'])) return true;
       if(action==='left'&&(this.touch.left||this.joy.x<-0.3)) return true;
       if(action==='right'&&(this.touch.right||this.joy.x>0.3)) return true;
       if(action==='jump'&&(this.touch.jump||this.joy.jump)) return true;
-      if(action==='action'&&(this.touch.action||this.joy.action)) return true;
       return false;
     },
     pressedOnce(action){
@@ -170,9 +167,6 @@
       if(action==='jump'&&(hit('ArrowUp')||hit(this.map.altJump)||hit('touch:jump'))) return true;
       if(action==='left'&&(hit('ArrowLeft')||hit('touch:left'))) return true;
       if(action==='right'&&(hit('ArrowRight')||hit('touch:right'))) return true;
-      if(action==='down'&&hit('ArrowDown')) return true;
-      if(action==='action'&&hit('touch:action')) return true;
-      if(action==='pause'&&hit('touch:pause')) return true;
       return false;
     },
     consumeJumpBuffer(){
