@@ -14,10 +14,13 @@
       window.addEventListener('resize',()=>this.fitTouch());
       window.addEventListener('orientationchange',()=>{ this.fitTouch(); if(global.SP_Engine&&SP_Engine.fitCanvas) SP_Engine.fitCanvas(); });
       document.addEventListener('fullscreenchange',()=>{ this.fitTouch(); if(global.SP_Engine&&SP_Engine.fitCanvas) SP_Engine.fitCanvas(); });
+      // First-touch fallback: hybrid touch laptops may report a fine pointer with
+      // zero touch points until the first tap. Respect an explicit user opt-out.
+      window.addEventListener('touchstart',()=>{ if(!this._hadTouch){ this._hadTouch=true; this.fitTouch(); this._syncTouchChecks(); } },{passive:true});
       this.fitTouch();
       $('#qMusic').addEventListener('input',e=>{ SP_Save.data.settings.music=+e.target.value; SP_Save.write(); SP_Audio.setVolumes(SP_Save.data.settings); });
       $('#qSfx').addEventListener('input',e=>{ SP_Save.data.settings.sfx=+e.target.value; SP_Save.write(); SP_Audio.setVolumes(SP_Save.data.settings); });
-      $('#qTouch').addEventListener('change',e=>{ SP_Save.data.settings.touch=e.target.checked; SP_Save.write(); this.fitTouch(); });
+      $('#qTouch').addEventListener('change',e=>{ const v=e.target.checked, s=SP_Save.data.settings; s.touch=v; s.touchOff=!v; SP_Save.write(); this._syncTouchChecks(); this.fitTouch(); });
       $('#qMotion').addEventListener('change',e=>{ SP_Save.data.settings.reducedMotion=e.target.checked; SP_Save.write(); SP_Engine.settings.reducedMotion=e.target.checked; });
       $('#btnPauseTop').addEventListener('click',()=>this.togglePause());
       const pauseHud=$('#btnPauseHud'); if(pauseHud) pauseHud.addEventListener('click',()=>this.togglePause());
@@ -180,12 +183,34 @@
       t.textContent=msg; t.classList.add('show');
       clearTimeout(this._toastT); this._toastT=setTimeout(()=>t.classList.remove('show'),2600);
     },
+    /* Touch capable? coarse pointer OR multi-touch points OR legacy touch event
+       OR an observed first touch (hybrid laptops). Desktop keyboard/mouse: false. */
+    isTouchDevice(){
+      try{ if(window.matchMedia&&window.matchMedia('(pointer:coarse)').matches) return true; }catch(e){}
+      try{ if(navigator&&(navigator.maxTouchPoints>0||navigator.msMaxTouchPoints>0)) return true; }catch(e){}
+      try{ if('ontouchstart' in window) return true; }catch(e){}
+      if(this._hadTouch) return true;
+      return false;
+    },
+    /* Effective preference ignoring the in-game view gate (drives the checkboxes):
+       forced ON wins, explicit OFF hides, otherwise auto = ON for touch devices. */
+    touchPrefOn(){
+      const s=SP_Save.data.settings;
+      if(s.touch) return true;
+      if(s.touchOff) return false;
+      return this.isTouchDevice();
+    },
+    _syncTouchChecks(){
+      const v=this.touchPrefOn();
+      const a=$('#qTouch'), b=$('#setTouch');
+      if(a) a.checked=v;
+      if(b) b.checked=v;
+    },
     fitTouch(){
       const s=SP_Save.data.settings;
-      // Setting ON = always show. Otherwise auto: touch-capable device AND game view active.
-      // Desktop keyboard/controller setups never see touch buttons.
-      const coarse=window.matchMedia&&window.matchMedia('(pointer:coarse)').matches;
-      const on=!!(s.touch||(coarse&&this.view==='game'));
+      // Forced ON = always show. Explicit OFF = always hide. Otherwise auto:
+      // touch-capable device AND game view active. Desktop stays untouched.
+      const on=!!(s.touch||(!s.touchOff&&this.isTouchDevice()&&this.view==='game'));
       document.body.classList.toggle('show-touch',on);
       const hk=$('#hintKbd'), ht=$('#hintTouch');
       if(hk) hk.classList.toggle('hidden',on);
@@ -196,8 +221,8 @@
       const chip=$('#rotateChip'); if(!chip) return;
       const portrait=window.innerHeight>=window.innerWidth;
       if(!portrait) this._chipHide=false; // re-arm when rotated back
-      const coarse=window.matchMedia&&window.matchMedia('(pointer:coarse)').matches;
-      const show=!!(coarse&&portrait&&this.view==='game'&&this.inGame&&!this._chipHide);
+      const touchCapable=this.isTouchDevice();
+      const show=!!(touchCapable&&portrait&&this.view==='game'&&this.inGame&&!this._chipHide);
       chip.classList.toggle('hidden',!show);
     },
     fullscreen(){ const wrap=document.getElementById('canvasWrap'); const el=(wrap&&wrap.requestFullscreen)?wrap:document.documentElement; try{ if(!document.fullscreenElement){ const p=el.requestFullscreen(); if(p&&p.catch) p.catch(()=>{}); } else document.exitFullscreen(); }catch(e){} },
@@ -491,9 +516,9 @@
       const s=SP_Save.data.settings;
       $('#setMaster').value=s.master; $('#setMusic').value=s.music; $('#setSfx').value=s.sfx;
       $('#setMasterV').textContent=s.master; $('#setMusicV').textContent=s.music; $('#setSfxV').textContent=s.sfx;
-      $('#setMute').checked=!!s.muted; $('#setTouch').checked=!!s.touch; $('#setMotion').checked=!!s.reducedMotion;
+      $('#setMute').checked=!!s.muted; $('#setMotion').checked=!!s.reducedMotion;
       $('#setShake').checked=s.shake!==false;
-      $('#qMusic').value=s.music; $('#qSfx').value=s.sfx; $('#qTouch').checked=!!s.touch; $('#qMotion').checked=!!s.reducedMotion;
+      $('#qMusic').value=s.music; $('#qSfx').value=s.sfx; this._syncTouchChecks(); $('#qMotion').checked=!!s.reducedMotion;
       this.renderKeymap();
       SP_Engine.settings.shake=s.shake!==false; SP_Engine.settings.reducedMotion=!!s.reducedMotion;
       document.body.classList.toggle('reduced-motion',!!s.reducedMotion);
@@ -504,7 +529,7 @@
       $('#setMusic').addEventListener('input',e=>{ s().music=+e.target.value; $('#setMusicV').textContent=e.target.value; SP_Save.write(); SP_Audio.setVolumes(s()); });
       $('#setSfx').addEventListener('input',e=>{ s().sfx=+e.target.value; $('#setSfxV').textContent=e.target.value; SP_Save.write(); SP_Audio.setVolumes(s()); });
       $('#setMute').addEventListener('change',e=>{ s().muted=e.target.checked; SP_Save.write(); SP_Audio.setVolumes(s()); });
-      $('#setTouch').addEventListener('change',e=>{ s().touch=e.target.checked; SP_Save.write(); this.fitTouch(); });
+      $('#setTouch').addEventListener('change',e=>{ const v=e.target.checked, st=s(); st.touch=v; st.touchOff=!v; SP_Save.write(); this._syncTouchChecks(); this.fitTouch(); });
       $('#setMotion').addEventListener('change',e=>{ s().reducedMotion=e.target.checked; SP_Save.write(); SP_Engine.settings.reducedMotion=e.target.checked; document.body.classList.toggle('reduced-motion',e.target.checked); });
       $('#setShake').addEventListener('change',e=>{ s().shake=e.target.checked; SP_Save.write(); SP_Engine.settings.shake=e.target.checked; });
       $('#btnFullscreen').addEventListener('click',()=>this.fullscreen());

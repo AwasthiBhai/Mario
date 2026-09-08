@@ -6,7 +6,9 @@
     version:1, introSeen:false, maxUnlocked:1,
     levels:{}, // "3": {done, bestScore, bestTime, coins, totalCoins, relic}
     totalCoins:0, totalRelics:0, totalScore:0,
-    settings:{master:80,music:70,sfx:80,muted:false,touch:false,reducedMotion:false,shake:true,keys:null}
+    // touch:false = auto (ON for touch devices, OFF for desktop); touch:true = always show.
+    // touchOff:true = user explicitly disabled (hides even on touch devices). Old saves merge to false = auto.
+    settings:{master:80,music:70,sfx:80,muted:false,touch:false,touchOff:false,reducedMotion:false,shake:true,keys:null}
   });
   function sanitize(s){
     const d=defaults();
