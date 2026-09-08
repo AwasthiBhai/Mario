@@ -293,7 +293,7 @@
     onHud(h){
       $('#hudScore').textContent=h.score; $('#hudCoins').textContent=h.coins+'/'+h.total;
       $('#hudLives').textContent=h.lives+' ('+h.hp+'♥)'; $('#hudTime').textContent=this.fmtTime(h.time);
-      $('#hudLevel').textContent=h.world+'-'+(((h.level-1)%5)+1)+' · Lv'+h.level; $('#hudPower').textContent=h.power;
+      $('#hudLevel').textContent=h.world+'-'+(((h.level-1)%5)+1)+' · Lv'+h.level;
       this.updateShopBalances(); // cheap: cached signature, DOM only on change
     },
     fmtTime(s){ s=Math.max(0,Math.ceil(s)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); },
