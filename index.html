@@ -230,14 +230,22 @@
           </div>
         </div>
         <div id="pauseOverlay" class="overlay hidden">
-          <div class="panel"><h2>⏸ Paused</h2>
-            <button class="btn btn-gold btn-block" data-action="resume">RESUME</button>
-            <button class="btn btn-ghost btn-block" data-action="restart">RESTART</button>
-            <div class="shop-balance">🛒 Power-Ups · 🪙 <b id="shopCoinsPause">0</b> this level</div>
-            <div id="shopPauseGrid" class="shop-grid"></div>
-            <button class="btn btn-ghost btn-block" data-nav="settings">SETTINGS</button>
-            <button class="btn btn-ghost btn-block" data-nav="levels">LEVEL SELECT</button>
-            <button class="btn btn-ghost btn-block" data-action="tomenu">MAIN MENU</button>
+          <div class="panel">
+            <div id="pauseMain">
+              <h2>⏸ Paused</h2>
+              <button class="btn btn-gold btn-block" data-action="resume">▶ RESUME</button>
+              <button class="btn btn-ghost btn-block" data-action="restart">↻ RESTART LEVEL</button>
+              <button class="btn btn-ghost btn-block" data-action="powershop">⚡ POWER-UPS</button>
+              <div class="row2"><button class="btn btn-ghost" data-nav="settings">⚙ SETTINGS</button><button class="btn btn-ghost" data-nav="levels">LEVELS</button></div>
+              <div class="row2"><button class="btn btn-ghost" data-action="tomenu">MENU</button><button class="btn btn-ghost" data-nav="home">⌂ HOME</button></div>
+            </div>
+            <div id="pauseShop" class="hidden">
+              <h2>⚡ Power-Ups</h2>
+              <div class="shop-balance">Current level coins: <strong>🪙 <b id="shopCoinsPause">0</b></strong></div>
+              <div id="shopPauseGrid" class="shop-grid"></div>
+              <p class="muted shop-note"><small>Coins reset every level — spend them before the goal!</small></p>
+              <button class="btn btn-ghost btn-block" data-action="pauseback">← BACK TO PAUSE</button>
+            </div>
           </div>
         </div>
         <div id="completeOverlay" class="overlay hidden">
@@ -269,11 +277,6 @@
     </div>
     <aside class="game-side">
       <details class="card game-acc" open><summary><span class="acc-title">This level</span><span class="acc-chev" aria-hidden="true">▾</span></summary><div id="levelInfo" class="muted">—</div></details>
-      <details class="card game-acc" open><summary><span class="acc-title">🛒 Power-Ups</span><span class="acc-chev" aria-hidden="true">▾</span></summary>
-        <div class="shop-balance">Current level coins: <strong>🪙 <span id="shopCoinsSide">0</span></strong></div>
-        <div id="shopGrid" class="shop-grid"></div>
-        <p class="muted shop-note"><small>Coins reset every level — spend them before the goal!</small></p>
-      </details>
       <details class="card game-acc" open><summary><span class="acc-title">Quick settings</span><span class="acc-chev" aria-hidden="true">▾</span></summary>
         <label class="slider-row">Music <input id="qMusic" type="range" min="0" max="100" value="70"></label>
         <label class="slider-row">SFX <input id="qSfx" type="range" min="0" max="100" value="80"></label>

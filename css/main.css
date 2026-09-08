@@ -1225,6 +1225,30 @@ body:not(.show-touch) .canvas-wrap:fullscreen #game {
   touch-action: none
 }
 
+/* ---- gameplay scroll-lock (strictly scoped) ----
+   While the game view is active, UI.show() sets body.playing: gestures
+   starting anywhere on the game viewport (canvas, HUD, touch-bar gaps)
+   must never scroll the page or trigger pull-to-refresh. Every other page
+   keeps normal scrolling — nothing here applies without body.playing.
+   Overlay panels (pause / shop) keep their own pan-y so long menus still
+   scroll with touch inside fullscreen, portrait and landscape. */
+body.playing {
+  overscroll-behavior-y: none;
+}
+
+body.playing .canvas-wrap {
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+
+body.playing .canvas-wrap .touch {
+  touch-action: none;
+}
+
+.canvas-wrap .panel {
+  touch-action: pan-y;
+}
+
 /* compact HUD: lives/coins/timer prioritized, .hud-sec hides on small screens */
 .hud {
   position: absolute;

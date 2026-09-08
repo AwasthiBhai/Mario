@@ -28,6 +28,19 @@
         btn.addEventListener('pointerdown',on); btn.addEventListener('pointerup',off);
         btn.addEventListener('pointercancel',off); btn.addEventListener('pointerleave',off);
       });
+      // Scoped scroll-lock fallback: a few mobile browsers ignore CSS
+      // touch-action. While gameplay is active, drags starting inside the game
+      // viewport must not scroll the page. Overlay panels (pause/shop) are
+      // exempt so they keep scrolling; outside gameplay this does nothing.
+      const wrap=document.getElementById('canvasWrap');
+      if(wrap&&!this._scrollLockBound){
+        this._scrollLockBound=true;
+        wrap.addEventListener('touchmove',e=>{
+          if(!document.body.classList.contains('playing')) return;
+          if(e.target&&e.target.closest&&e.target.closest('.panel')) return;
+          if(e.cancelable) e.preventDefault();
+        },{passive:false});
+      }
     },
     pollGamepad(){
       this.joy={x:0,jump:false,action:false,pause:false};

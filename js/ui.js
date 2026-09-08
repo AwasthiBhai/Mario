@@ -89,6 +89,9 @@
     isMobileNavOpen(){ const mn=$('#mobileNav'); return !!(mn&&!mn.classList.contains('hidden')); },
     show(view){
       this.view=view;
+      // gameplay scroll-lock gate: set ONLY while the game view is active,
+      // so every menu/page keeps normal scrolling (see body.playing CSS).
+      document.body.classList.toggle('playing',view==='game');
       $$('.view').forEach(v=>v.classList.remove('active'));
       const el=$('#view-'+view); if(el) el.classList.add('active');
       $$('.site-nav .nav-link').forEach(n=>n.classList.toggle('active',n.getAttribute('data-nav')===view));
@@ -102,6 +105,7 @@
           // first visit: land on the in-canvas main menu (NO recursion: _menuOverlay never calls show)
           this.inGame=true; this.hideOverlays(); this._menuOverlay();
         } else if(this.suspended&&this.paused&&this._allOverlaysHidden()){
+          this.showPauseShop(false);
           $('#pauseOverlay').classList.remove('hidden');
         }
         this.suspended=false;
@@ -109,6 +113,12 @@
         // leaving gameplay for any website screen: freeze gameplay, silence music
         if(this.inGame&&global.SP_Engine&&SP_Engine.running&&SP_Engine.level&&!this._endOverlayVisible()&&!this.paused){
           SP_Engine.setPaused(true); this.paused=true; this.suspended=true;
+        }
+        // Fullscreen shows ONLY the game wrapper: without exiting, the target
+        // page (Settings, Levels, …) would sit underneath it, unreachable and
+        // looking frozen on mobile. Exit so the page is visible + touchable.
+        if(document.fullscreenElement){
+          try{ const ex=document.exitFullscreen(); if(ex&&ex.catch) ex.catch(()=>{}); }catch(e){}
         }
         if(!global.SP_Intro||SP_Intro.done) SP_Audio.setState('website');
       }
@@ -134,6 +144,8 @@
       if(a==='newgame'){ if(confirm('Start a NEW GAME? Progress resets (settings are kept).')){ const keepSet=SP_Save.data.settings, keepIntro=SP_Save.data.introSeen; SP_Save.reset(); SP_Save.data.settings=keepSet; SP_Save.data.introSeen=keepIntro; SP_Save.write(); this.carryScore=0; this.renderLevelSelect(); this.refreshHero(); this.startLevel(1); } }
       if(a==='resume'){ this.togglePause(false); }
       if(a==='restart'){ this.hideOverlays(); SP_Engine.setPaused(false); this.paused=false; this.suspended=false; SP_Audio.setState('resumed'); this.startLevel(this.currentLevel,true); }
+      if(a==='powershop'){ this.showPauseShop(true); }
+      if(a==='pauseback'){ this.showPauseShop(false); }
       if(a==='next'){ const n=Math.min(50,this.currentLevel+1); if(!SP_Save.isUnlocked(n)){ this.openMenu(); return; } this.hideOverlays(); this.startLevel(n); }
       if(a==='tomenu'){ this.hideOverlays(); this.inGame=true; this.suspended=false; this._menuOverlay(); }
       if(a==='credits'){ $('#endingOverlay').classList.add('hidden'); this.show('credits'); }
@@ -153,7 +165,15 @@
       this.inGame=true; this.suspended=false;
       this.show('game'); this.hideOverlays(); this._menuOverlay();
     },
-    hideOverlays(){ ['#menuOverlay','#pauseOverlay','#completeOverlay','#overOverlay','#endingOverlay'].forEach(s=>{ const el=$(s); if(el) el.classList.add('hidden'); }); },
+    hideOverlays(){ ['#menuOverlay','#pauseOverlay','#completeOverlay','#overOverlay','#endingOverlay'].forEach(s=>{ const el=$(s); if(el) el.classList.add('hidden'); }); this.showPauseShop(false); },
+    /* Pause menu sub-screens: main options <-> Power-Ups shop, both inside the
+       in-canvas overlay so fullscreen is never disturbed. Game stays paused. */
+    showPauseShop(open){
+      const m=$('#pauseMain'), s=$('#pauseShop');
+      if(m) m.classList.toggle('hidden',!!open);
+      if(s) s.classList.toggle('hidden',!open);
+      if(open) this.updateShopBalances(true);
+    },
     toast(msg){
       const t=$('#toast'); if(!t) return;
       t.textContent=msg; t.classList.add('show');
@@ -186,22 +206,37 @@
       if(!SP_Save.isUnlocked(n)){ alert('Level '+n+' is locked. Clear Level '+(n-1)+' first!'); return; }
       this.currentLevel=n; this.inGame=true; this.paused=false; this.suspended=false; this.completeRes=null;
       this.show('game'); this.hideOverlays();
-      SP_Engine.setPaused(false);
-      $('#loader').classList.remove('hidden');
+      if(!keepScore) this.carryScore=0;
+      // Build FIRST: everything gameplay needs is ready before the reveal,
+      // held paused so the par timer can't tick behind the loader.
+      SP_Engine.loadLevel(n); SP_Engine.start(); SP_Engine.setPaused(true);
+      const L=SP_Engine.level;
+      $('#gameTitleLabel').textContent='World '+(L.world+1)+' · Level '+n+' — '+L.worldName+(L.isBoss?' · BOSS':'');
+      $('#levelInfo').innerHTML='<strong>'+L.name+'</strong><br>'+L.tip+'<br>⏱ par '+L.timeLimit+'s · 🪙 '+L.coins.length+' shards · ★ 1 relic'+(L.isBoss?'<br>☠ BOSS: '+L.boss.name+' ('+L.boss.hp+' HP)':'');
+      const nx=n<50?SP_Levels.levelName(n+1):'— you finished! —';
+      $('#upNext').textContent=n<50?nx:'Final level complete!';
+      this.renderShop(); // fresh per-level coins + cleared effects
       const tips=['Hold SHIFT to run farther.','Stomp = bounce high. Hold jump!','Bump suspicious walls — secrets hide.','Starbolt (E) beats Shellyhorns.','Checkpoints save you. Touch them!','Relics are worth 500 + bragging rights.','Falling platforms respawn. Keep calm.','Bosses telegraph hops — bait, dodge, stomp.'];
       $('#loaderTip').textContent='Tip: '+tips[n%tips.length];
-      let p=0; const iv=setInterval(()=>{ p+=25; $('#loaderFill').style.width=Math.min(100,p)+'%'; if(p>=100){ clearInterval(iv);
+      $('#loader').classList.remove('hidden');
+      // Smooth deterministic loader (~2.6s): time-based eased progress, so it
+      // feels identical on every device instead of coarse timer ticks bunching
+      // behind main-thread work (fonts/canvases/audio) on mobile hardware.
+      $('#loaderFill').style.width='0%';
+      const DUR=2600, t0=performance.now();
+      const token=(this._loadToken=(this._loadToken||0)+1);
+      cancelAnimationFrame(this._loadRaf);
+      const step=(now)=>{
+        if(token!==this._loadToken) return; // superseded by a newer startLevel
+        const k=Math.min(1,(now-t0)/DUR);
+        const eased=1-Math.pow(1-k,3);
+        $('#loaderFill').style.width=(eased*100).toFixed(1)+'%';
+        if(k<1){ this._loadRaf=requestAnimationFrame(step); return; }
         $('#loader').classList.add('hidden');
-        if(!keepScore) this.carryScore=0;
-        SP_Engine.loadLevel(n); SP_Engine.start(); SP_Engine.setPaused(false);
-        SP_Audio.setState('level',{world:SP_Engine.level.world}); // level music fades in
-        const L=SP_Engine.level;
-        $('#gameTitleLabel').textContent='World '+(L.world+1)+' · Level '+n+' — '+L.worldName+(L.isBoss?' · BOSS':'');
-        $('#levelInfo').innerHTML='<strong>'+L.name+'</strong><br>'+L.tip+'<br>⏱ par '+L.timeLimit+'s · 🪙 '+L.coins.length+' shards · ★ 1 relic'+(L.isBoss?'<br>☠ BOSS: '+L.boss.name+' ('+L.boss.hp+' HP)':'');
-        const nx=n<50?SP_Levels.levelName(n+1):'— you finished! —';
-        $('#upNext').textContent=n<50?nx:'Final level complete!';
-        this.renderShop(); // fresh per-level coins + cleared effects
-      } },90);
+        SP_Engine.setPaused(this.paused); // stays paused if the user paused mid-load
+        if(!this.paused) SP_Audio.setState('level',{world:L.world}); // level music fades in
+      };
+      this._loadRaf=requestAnimationFrame(step);
     },
     togglePause(force){
       if(!this.inGame||!SP_Engine.running) return;
@@ -210,8 +245,8 @@
       const want=(typeof force==='boolean')?(force):(!this.paused);
       this.paused=want;
       SP_Engine.setPaused(this.paused);
+      if(this.paused){ this.showPauseShop(false); this.updateShopBalances(true); } // pause menu always opens on main options
       $('#pauseOverlay').classList.toggle('hidden',!this.paused);
-      if(this.paused) this.updateShopBalances(true); // pause-menu shop shows live balance
       SP_Audio.setState(this.paused?'paused':'resumed'); // duck / unduck level music
       SP_Audio.sfx('click');
     },
@@ -293,7 +328,7 @@
     renderShop(){
       const E=global.SP_Engine;
       const catalog=(E&&E.SHOP)||[];
-      ['#shopGrid','#shopPauseGrid'].forEach(sel=>{
+      ['#shopPauseGrid'].forEach(sel=>{ // single in-game shop lives in the pause menu (fullscreen-safe)
         const g=$(sel); if(!g) return;
         g.innerHTML='';
         catalog.forEach(item=>{
@@ -322,8 +357,7 @@
       if(!force&&sig===this._shopCache) return; // onHud ticks every frame: no DOM churn
       const prevCoins=this._shopCache?parseInt(String(this._shopCache).split('|')[0],10)||0:coins;
       this._shopCache=sig;
-      const s1=$('#shopCoinsSide'), s2=$('#shopCoinsPause');
-      if(s1) s1.textContent=String(coins);
+      const s2=$('#shopCoinsPause');
       if(s2) s2.textContent=String(coins);
       Array.from(document.querySelectorAll('.shop-card')).forEach(card=>{
         const id=card.getAttribute('data-shop');
