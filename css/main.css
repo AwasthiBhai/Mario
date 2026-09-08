@@ -1343,6 +1343,8 @@ body.playing .canvas-wrap .touch {
   pointer-events: auto;
   width: var(--tc-size);
   height: var(--tc-size);
+  min-width: var(--tc-size);
+  min-height: var(--tc-size);
   border-radius: 50%;
   border: 2px solid rgba(255, 255, 255, .35);
   background: rgba(0, 0, 0, .55);
@@ -1368,8 +1370,12 @@ body.playing .canvas-wrap .touch {
 }
 
 .touch .t-pause {
-  width: calc(var(--tc-size) * .72);
-  height: calc(var(--tc-size) * .72);
+  width: var(--tc-size);
+  height: var(--tc-size);
+  min-width: var(--tc-size);
+  min-height: var(--tc-size);
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, .35);
   font-size: calc(var(--tc-size) * .28);
   opacity: .7
 }
@@ -2450,8 +2456,8 @@ body.show-touch #hintKbd {
     justify-content: space-between;
     gap: 8px;
     padding: 8px calc(10px + var(--sar)) calc(10px + var(--sab)) calc(10px + var(--sal));
-    background: #070b20;
-    border-top: 1px solid #232c66;
+    background: transparent;
+    border-top: none;
     pointer-events: auto;
     z-index: 4
   }
@@ -2549,8 +2555,8 @@ body.show-touch #hintKbd {
     justify-content: space-between;
     gap: 10px;
     padding: 10px calc(14px + var(--sar)) calc(10px + var(--sab)) calc(14px + var(--sal));
-    background: #070b20;
-    border-top: 1px solid #232c66;
+    background: transparent;
+    border-top: none;
     pointer-events: auto;
     z-index: 4
   }
@@ -2609,8 +2615,8 @@ body.show-touch .canvas-wrap:fullscreen .touch {
   justify-content: space-between;
   gap: var(--tc-gap);
   padding: 10px calc(14px + var(--sar)) calc(12px + var(--sab)) calc(14px + var(--sal));
-  background: rgba(4, 6, 18, .96);
-  border-top: 1px solid #232c66;
+  background: transparent;
+  border-top: none;
   pointer-events: auto
 }
 
@@ -2642,8 +2648,8 @@ body.show-touch .canvas-wrap:fullscreen .touch {
     align-items: center;
     justify-content: space-between;
     padding: 12px calc(16px + var(--sar)) calc(12px + var(--sab)) calc(16px + var(--sal));
-    background: #070b20;
-    border-top: 1px solid #232c66;
+    background: transparent;
+    border-top: none;
     pointer-events: auto
   }
 
@@ -2768,17 +2774,17 @@ h2 small { color: var(--text-muted); }
 .rev-legacy-row { border-top-color: var(--border); }
 .creator-role { color: var(--text-secondary); }
 
-/* touch bars follow theme (gameplay buttons themselves unchanged) */
+/* touch bars stay transparent (no bar background); buttons keep their own style */
 body.show-touch .touch,
 body.show-touch .canvas-wrap:fullscreen .touch {
-  background: var(--bg-surface);
-  border-top-color: var(--border);
+  background: transparent;
+  border-top: none;
 }
 @media (max-width: 600px) and (orientation: portrait) {
-  body.show-touch .touch { background: var(--bg-surface); border-top-color: var(--border); }
+  body.show-touch .touch { background: transparent; border-top: none; }
 }
 @media (max-width: 900px) and (orientation: landscape) {
-  body.show-touch .touch { background: var(--bg-surface); border-top-color: var(--border); }
+  body.show-touch .touch { background: transparent; border-top: none; }
 }
 
 /* ---------- DARK: true black, cinematic, minimal ---------- */
