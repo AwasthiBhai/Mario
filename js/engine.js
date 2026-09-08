@@ -59,12 +59,12 @@
       L.enemies=L.enemies.map(e=>Object.assign({w:ENEMY_DEF[e.kind].w,h:ENEMY_DEF[e.kind].h,vy:0,alive:true,shootT:1+Math.random()*2,hp:ENEMY_DEF[e.kind].hp,flash:0,groundY:e.y},e));
       if(L.boss){ L.boss=Object.assign({vx:0,vy:0,hurtT:0,shootT:2,dead:false,w:64+num/4,h:56+num/5,dir:-1},L.boss); }
       this.level=L; this.levelNum=num; this.time=0; this.timeLeft=L.timeLimit;
-      this.score=(this.cb.getCarryScore?this.cb.getCarryScore():0)||0; this.coinCount=0; this.coinTotal=L.coins.length;
+      this.score=(this.cb.getCarryScore?this.cb.getCarryScore():0)||0; this.coinCount=0; this.levelCoins=0; this.coinTotal=L.coins.length;
       this.lives=3; this.completed=false; this.dead=false; this.relicGot=false; this.secretCount=0;
       this.parts=[]; this.shots=[]; this.eshots=[]; this.floaters=[];
       this.player={x:L.spawn.x,y:L.spawn.y,w:28,h:42,vx:0,vy:0,face:1,onGround:false,coyote:0,jbuf:0,
-        hp:3,maxhp:3,iframes:0,state:'idle',anim:0,crouch:false,shield:false,speedT:0,jumpT:0,starT:0,shootCd:0,dead:0,win:0,landed:0};
-      this.checkpoint={x:L.spawn.x,y:L.spawn.y};
+        hp:3,maxhp:3,iframes:0,state:'idle',anim:0,crouch:false,shield:false,speedT:0,jumpT:0,starT:0,magnetT:0,invT:0,shootCd:0,dead:0,win:0,landed:0};
+      this.checkpoint=this.sanitizeCheckpoint({x:L.spawn.x,y:L.spawn.y});
       this.cam.x=0; this.cam.y=0;
       this._run=(this._run||0)+1;
       this.bossMode=false; // UI (audio state) notified when the arena is actually entered
@@ -78,6 +78,8 @@
     },
     hurtPlayer(fromX){
       const p=this.player; if(!p||p.iframes>0||p.dead||this.completed) return;
+      if(!isFinite(fromX)) fromX=p.x+p.w/2; // defensive: never inherit NaN knockback
+      if(p.invT>0){ this.burst(p.x+p.w/2,p.y+p.h/2,'#FFC94D',6); return; } // invincible: no damage, no knockback
       if(p.shield){ p.shield=false; p.iframes=1.5; global.SP_Audio.sfx('hurt'); this.burst(p.x,p.y,'#5DF2C8',14); this.floater(p.x,p.y-20,'SHIELD!', '#5DF2C8'); return; }
       p.hp--; p.iframes=1.5; global.SP_Audio.sfx('hurt'); this.cam.shake=8;
       this.burst(p.x+p.w/2,p.y+p.h/2,'#FF6B6B',16);
@@ -93,7 +95,7 @@
         if(this._run!==run||this.levelNum!==lv||!this.level) return;
         this.lives--;
         if(this.lives<=0){ this.gameOver(); }
-        else{ p.x=this.checkpoint.x; p.y=this.checkpoint.y-10; p.vx=0;p.vy=0;p.hp=p.maxhp;p.iframes=2;p.dead=0;p.shield=false; this.cam.x=Math.max(0,Math.min(this.level.width-VIEW_W,p.x-VIEW_W/2)); if(this.cb.onHud) this.cb.onHud(this.hud()); }
+        else{ this.respawnAtCheckpoint(); p.hp=p.maxhp;p.iframes=2;p.dead=0;p.shield=false; this.cam.x=Math.max(0,Math.min(this.level.width-VIEW_W,p.x-VIEW_W/2)); if(this.cb.onHud) this.cb.onHud(this.hud()); }
       },1100);
       if(this.cb.onHud) this.cb.onHud(this.hud());
     },
@@ -104,11 +106,11 @@
       this.score+=1000+timeBonus+this.lives*200;
       global.SP_Audio.sfx('goal');
       this.confetti(this.player.x,this.player.y-40);
-      const res={score:this.score,coins:this.coinCount,totalCoins:this.coinTotal,relic:this.relicGot,time:this.time,best:timeBonus,secrets:this.secretCount,lives:this.lives};
+      const res={score:this.score,coins:this.coinCount,collected:this.coinCount,spent:this.coinCount-this.levelCoins,remaining:this.levelCoins,totalCoins:this.coinTotal,relic:this.relicGot,time:this.time,best:timeBonus,secrets:this.secretCount,lives:this.lives};
       const run=this._run, lv=this.levelNum;
       setTimeout(()=>{ if(this._run!==run||this.levelNum!==lv) return; if(this.cb.onComplete) this.cb.onComplete(res); },900);
     },
-    hud(){ return {score:this.score,coins:this.coinCount,total:this.coinTotal,lives:this.lives,hp:this.player?this.player.hp:3,time:this.timeLeft,power:this.player?(this.player.starT>0?'✦ STAR':this.player.shield?'🛡 SHIELD':this.player.speedT>0?'🍃 SWIFT':this.player.jumpT>0?'🍄 SPRING':'✦'):'✦',level:this.levelNum,world:this.level?this.level.world+1:1}; },
+    hud(){ return {score:this.score,coins:this.levelCoins,collected:this.coinCount,total:this.coinTotal,lives:this.lives,hp:this.player?this.player.hp:3,time:this.timeLeft,power:this.player?(this.player.invT>0?'✦ INVINCIBLE':this.player.starT>0?'✦ STAR':this.player.shield?'🛡 SHIELD':this.player.speedT>0?'🍃 SWIFT':this.player.jumpT>0?'🍄 SPRING':this.player.magnetT>0?'🧲 MAGNET':'✦'):'✦',level:this.levelNum,world:this.level?this.level.world+1:1}; },
     floater(x,y,text,color){ this.floaters.push({x,y,text,color:color||'#FFC94D',t:1.2}); },
     burst(x,y,color,n){ if(this.settings.reducedMotion) n=Math.min(4,n); else if(this.lowFX) n=Math.ceil(n*0.6); for(let i=0;i<n;i++){ const a=Math.random()*6.28,s=60+Math.random()*220; this.parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-120,t:0.5+Math.random()*0.5,color,sz:2+Math.random()*4}); } },
     confetti(x,y){ const cols=['#FFC94D','#5DF2C8','#FF6B6B','#B388FF','#4DA6FF']; const cn=this.lowFX?40:70; for(let i=0;i<cn;i++){ const a=Math.random()*6.28,s=100+Math.random()*300; this.parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-260,t:1+Math.random(),color:cols[i%5],sz:3+Math.random()*4,grav:900}); } },
@@ -142,17 +144,22 @@
         if(s.type==='oneway'||(!s.revealed)) continue;
         if(aabb(p,s)){
           if(p.vx>0) p.x=s.x-p.w; else if(p.vx<0) p.x=s.x+s.w;
-          if(s.type==='move'&&s.axis==='x') p.x+=s.dx||0;
+          // NOTE: moving-platform carry is applied once in the vertical pass
+          // below (it used to be applied twice, shoving the player into walls).
           p.vx=0;
         }
       }
-      // vertical
+      // vertical (landing tolerance scales with this frame's travel so fast
+      // falls at low fps can't tunnel through thin platforms and drop the
+      // player into a surprise checkpoint respawn)
       const prevBottom=p.y+p.h;
+      const fallDist=Math.max(0,p.vy*dt);
+      const landTol=Math.max(18,fallDist+4), oneTol=Math.max(8,fallDist+2);
       p.y+=p.vy*dt; p.onGround=false;
       for(const s of this.solidsAt()){
         if(s.gone) continue;
         if(s.type==='oneway'){
-          if(p.vy>=0&&prevBottom<=s.y+8&&aabb(p,s)){ p.y=s.y-p.h; p.vy=0; p.onGround=true; p.ground=s; }
+          if(p.vy>=0&&prevBottom<=s.y+oneTol&&aabb(p,s)){ p.y=s.y-p.h; p.vy=0; p.onGround=true; p.ground=s; }
           continue;
         }
         if(!s.revealed){
@@ -161,7 +168,7 @@
           continue;
         }
         if(aabb(p,s)){
-          if(p.vy>0&&prevBottom<=s.y+18){
+          if(p.vy>0&&prevBottom<=s.y+landTol){
             p.y=s.y-p.h; p.vy=0; p.onGround=true; p.ground=s;
             if(s.type==='bouncy'){ p.vy=-950; global.SP_Audio.sfx('spring'); this.burst(p.x,p.y+p.h,'#5DF2C8',10); }
             if(s.type==='fall'){ s.fallT+=dt; }
@@ -174,19 +181,64 @@
           }
         }
       }
+      // defensive: a corrupted coordinate must never fling the player across
+      // the level — clamp to the world, and recover to the checkpoint if broken
+      if(!isFinite(p.x)||!isFinite(p.y)){ this.respawnAtCheckpoint(); return; }
       p.x=Math.max(-30,Math.min(this.level.width-10,p.x));
-      if(p.y>620){ // fell
+      if(p.y>620){ // fell below the world
         this.hurtPlayer(p.x); const pl=this.player;
-        if(pl.hp>0){ pl.x=this.checkpoint.x; pl.y=this.checkpoint.y-20; pl.vx=0; pl.vy=0; }
-        else { pl.y=600; }
+        if(pl.hp>0&&!pl.dead){ this.respawnAtCheckpoint(); }
+        else if(!pl.dead) { pl.y=600; }
       }
+    },
+    /* Resolve the highest ground top under x (used for safe checkpoints). */
+    groundTopAt(x){
+      let best=Infinity;
+      for(const s of this.level.solids){
+        if(s.gone||s.type!=='ground') continue;
+        if(x>=s.x&&x<=s.x+s.w&&s.y<best) best=s.y;
+      }
+      return best===Infinity?470:best;
+    },
+    /* Clamp a checkpoint into the world and onto solid ground so respawns
+       never materialize inside a wall or in mid-air. */
+    sanitizeCheckpoint(cp){
+      const w=this.level?this.level.width:3000;
+      const x=Math.max(20,Math.min(w-40,cp.x));
+      let y=isFinite(cp.y)?cp.y:440;
+      y=Math.max(60,Math.min(560,y));
+      const gy=this.level?this.groundTopAt(x):470;
+      // rest just above the ground, but never above where the player stood
+      y=Math.min(y,gy-44);
+      // nudge up out of any solid we might still overlap
+      const probe={w:28,h:42};
+      for(let i=0;i<8;i++){
+        probe.x=x; probe.y=y;
+        let inside=false;
+        for(const s of this.solidsAt()){
+          if(s.type==='oneway'||!s.revealed) continue;
+          if(aabb(probe,s)){ inside=true; break; }
+        }
+        if(!inside) break;
+        y-=14;
+      }
+      return {x,y:Math.max(40,y)};
+    },
+    respawnAtCheckpoint(){
+      const p=this.player; if(!p) return;
+      const cp=this.sanitizeCheckpoint(this.checkpoint||{x:60,y:390});
+      this.checkpoint=cp;
+      p.x=cp.x; p.y=cp.y; p.vx=0; p.vy=0;
     },
     updatePlayer(dt,In){
       const p=this.player; if(!p||this.completed) return;
+      // defensive: corrupted physics state recovers at the checkpoint instead
+      // of flinging the player across (or out of) the level
+      if(!isFinite(p.x)||!isFinite(p.y)||!isFinite(p.vx)||!isFinite(p.vy)){ this.respawnAtCheckpoint(); return; }
       if(p.dead>0){ p.dead-=dt; p.vy+=GRAV*dt; p.y+=p.vy*dt; return; }
       if(p.win>0){ p.win-=dt; p.vx*=0.9; p.vy+=GRAV*dt; p.y+=p.vy*dt; return; }
       p.anim+=dt; p.iframes=Math.max(0,p.iframes-dt);
-      p.speedT=Math.max(0,p.speedT-dt); p.jumpT=Math.max(0,p.jumpT-dt); p.starT=Math.max(0,p.starT-dt); p.shootCd=Math.max(0,p.shootCd-dt);
+      p.speedT=Math.max(0,p.speedT-dt); p.jumpT=Math.max(0,p.jumpT-dt); p.starT=Math.max(0,p.starT-dt); p.magnetT=Math.max(0,(p.magnetT||0)-dt); p.invT=Math.max(0,(p.invT||0)-dt); p.shootCd=Math.max(0,p.shootCd-dt);
       const run=In.down('run')||p.speedT>0;
       const max=run?330:210;
       const acc=p.onGround?2200:1500;
@@ -225,16 +277,28 @@
       p.state=!p.onGround?(p.vy<0?'jump':'fall'):(Math.abs(p.vx)>250?'run':Math.abs(p.vx)>20?'walk':(p.crouch?'crouch':'idle'));
       // interactions
       const L=this.level, me={x:p.x-4,y:p.y-4,w:p.w+8,h:p.h+8};
-      for(const c of L.coins){ if(!c.taken&&Math.abs(c.x-(p.x+p.w/2))<26&&Math.abs(c.y-(p.y+p.h/2))<34){ c.taken=true; this.coinCount++; this.score+=c.secret?200:50; global.SP_Audio.sfx('coin'); this.burst(c.x,c.y,'#FFC94D',8); this.floater(c.x,c.y-14,'+'+(c.secret?200:50),'#FFC94D'); } }
+      const magR=p.magnetT>0?150:0, pcx=p.x+p.w/2, pcy=p.y+p.h/2;
+      for(const c of L.coins){
+        if(c.taken) continue;
+        // magnet: drift nearby shards toward Pip (positions stay level-local)
+        if(magR){
+          const dx=pcx-c.x, dy=pcy-c.y, d=Math.sqrt(dx*dx+dy*dy);
+          if(d<magR&&d>4){ const step=Math.min(d,460*dt); c.x+=dx/d*step; c.y+=dy/d*step; }
+        }
+        if(Math.abs(c.x-pcx)<26&&Math.abs(c.y-pcy)<34){ c.taken=true; this.coinCount++; this.levelCoins++; this.score+=c.secret?200:50; global.SP_Audio.sfx('coin'); this.burst(c.x,c.y,'#FFC94D',8); this.floater(c.x,c.y-14,'+'+(c.secret?200:50),'#FFC94D'); }
+      }
       if(L.relic&&!L.relic.taken&&Math.abs(L.relic.x-(p.x+p.w/2))<28&&Math.abs(L.relic.y-(p.y+p.h/2))<36){ L.relic.taken=true; this.relicGot=true; this.score+=500; global.SP_Audio.sfx('relic'); this.floater(L.relic.x,L.relic.y-20,'★ RELIC +500','#B388FF'); this.confetti(L.relic.x,L.relic.y); }
       for(const u of L.powerups){ if(!u.taken&&Math.abs(u.x-(p.x+p.w/2))<28&&Math.abs(u.y-(p.y+p.h/2))<36){ u.taken=true; this.applyPower(u.kind); } }
-      for(const c of L.checkpoints){ if(!c.on&&Math.abs(c.x-(p.x+p.w/2))<30&&(p.y<500)){ c.on=true; this.checkpoint={x:c.x,y:p.y}; this.score+=50; global.SP_Audio.sfx('checkpoint'); this.floater(c.x,300,'CHECKPOINT!','#5DF2C8'); this.burst(c.x,340,'#5DF2C8',14);} }
-      // checkpoint y resolve: find ground under
-      // hazards
+      for(const c of L.checkpoints){ if(!c.on&&Math.abs(c.x-(p.x+p.w/2))<30&&(p.y<500)){ c.on=true; this.checkpoint=this.sanitizeCheckpoint({x:c.x,y:this.groundTopAt(c.x)-p.h-2}); this.score+=50; global.SP_Audio.sfx('checkpoint'); this.floater(c.x,300,'CHECKPOINT!','#5DF2C8'); this.burst(c.x,340,'#5DF2C8',14);} }
+      // checkpoint y resolve: stored ground-resolved at trigger time (see above)
+      // hazards: every hazard only deals damage + knockback. Checkpoint
+      // respawns happen exclusively through the death path (killPlayer) or a
+      // genuine fall below the world — touching lava edges must never fling
+      // the player backwards across the level.
       for(const h of L.hazards){
         const hb={x:h.x,y:h.y,w:h.w,h:h.h};
         if(h.kind==='pit') continue;
-        if(aabb(me,hb)){ if(h.kind==='lava'||h.kind==='poison'||h.kind==='void'||h.kind==='starfire'){ this.hurtPlayer(h.x); if(true){ /* lava respawn */ if(this.player.hp>0&&this.player.iframes>1.4){ this.player.x=this.checkpoint.x; this.player.y=this.checkpoint.y-20; this.player.vx=0; this.player.vy=-300; } } } else this.hurtPlayer(h.x+h.w/2); }
+        if(aabb(me,hb)){ this.hurtPlayer(h.x+h.w/2); }
       }
       // enemies: stomp vs hurt
       for(const e of L.enemies){
@@ -261,6 +325,43 @@
         if(!L.isBoss||!L.boss||L.boss.dead){ p.win=2; this.completeLevel(); }
       }
       if(this.cb.onHud) this.cb.onHud(this.hud());
+    },
+    /* ---------------- POWER-UP SHOP (per-level coins) ----------------
+       levelCoins is runtime-only: reset to 0 on every loadLevel, deducted on
+       purchase, never persisted to saves, never carried into the next level.
+       coinCount (collection records) is intentionally left untouched by
+       spending. Balances inspected against the real level economy: typical
+       levels hold 60–100 shards, a decent run banks ~25–40, so prices force
+       real choices (small haul → boost, good haul → shield/life, big haul →
+       invincibility) without ever being farmable across levels. */
+    SHOP:[
+      {id:'jump', icon:'🦘', name:'JUMP BOOST', desc:'Higher jumps · 30s', price:15},
+      {id:'speed',icon:'⚡', name:'SPEED BOOST',desc:'Move faster · 30s',   price:20},
+      {id:'magnet',icon:'🧲',name:'MAGNET',     desc:'Coins fly to you · 30s',price:20},
+      {id:'shield',icon:'🛡',name:'SHIELD',     desc:'Blocks one hit',      price:25},
+      {id:'life', icon:'❤', name:'EXTRA LIFE', desc:'+1 life · max 5',     price:30},
+      {id:'star', icon:'✦', name:'INVINCIBILITY',desc:'No damage · 15s',   price:40},
+    ],
+    buyPower(id){
+      const p=this.player, L=this.level;
+      if(!p||!L||this.completed||p.dead) return {ok:false,msg:'Finish the moment first!'};
+      const item=this.SHOP.find(i=>i.id===id);
+      if(!item) return {ok:false,msg:'Unknown power-up.'};
+      if(id==='life'&&this.lives>=5) return {ok:false,msg:'Already at max lives!'};
+      if(id==='shield'&&p.shield) return {ok:false,msg:'Shield already active!'};
+      if(this.levelCoins<item.price) return {ok:false,msg:'Need '+item.price+' 🪙 (have '+this.levelCoins+')'};
+      this.levelCoins-=item.price;
+      if(id==='jump') p.jumpT=30;
+      if(id==='speed') p.speedT=30;
+      if(id==='magnet') p.magnetT=30;
+      if(id==='shield') p.shield=true;
+      if(id==='life') this.lives=Math.min(5,this.lives+1);
+      if(id==='star') p.invT=15;
+      global.SP_Audio.sfx('power');
+      this.burst(p.x+p.w/2,p.y+p.h/2,'#FFC94D',14);
+      this.floater(p.x,p.y-24,item.name+'!','#FFC94D');
+      if(this.cb.onHud) this.cb.onHud(this.hud());
+      return {ok:true,msg:item.name+' active!',remaining:this.levelCoins};
     },
     applyPower(kind){
       const p=this.player; global.SP_Audio.sfx('power');
@@ -626,6 +727,8 @@
       // shield / powers aura
       if(p.shield){ c.strokeStyle='#5DF2C8'; c.lineWidth=3; c.globalAlpha=0.8; c.beginPath(); c.arc(cx,p.y+p.h/2,30+Math.sin(this.tGlobal*5)*3,0,7); c.stroke(); c.globalAlpha=blink?0.45:1; }
       if(p.starT>0){ c.fillStyle='#FFC94D'; c.font='bold 12px sans-serif'; c.fillText('✦',p.x-14,p.y-6); }
+      if(p.invT>0){ c.strokeStyle='#FFC94D'; c.lineWidth=3; c.globalAlpha=0.9; c.beginPath(); c.arc(cx,p.y+p.h/2,34+Math.sin(this.tGlobal*7)*4,0,7); c.stroke(); c.fillStyle='#FFE9A8'; c.font='bold 12px sans-serif'; c.fillText('✦',p.x+p.w+2,p.y-6); c.globalAlpha=blink?0.45:1; }
+      if(p.magnetT>0){ c.strokeStyle='rgba(255,201,77,0.5)'; c.lineWidth=2; c.beginPath(); c.arc(cx,p.y+p.h/2,24,0,7); c.stroke(); }
       c.restore();
       // hp hearts above
       c.fillStyle='rgba(0,0,0,0.45)'; this.rr(c,p.x-6,p.y-24,40,14,7); c.fill();

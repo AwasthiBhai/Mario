@@ -10,7 +10,7 @@
     init(){
       try{ if(global.SP_Theme&&SP_Theme.init) SP_Theme.init(); }catch(e){}
       this.bindNav(); this.bindActions(); this.bindSettings(); this.bindReviews(); this.bindTheme();
-      this.renderWorldsHome(); this.renderLevelSelect(); this.refreshHero(); this.applySettingsToDom(); this.renderReviews();
+      this.renderWorldsHome(); this.renderLevelSelect(); this.refreshHero(); this.applySettingsToDom(); this.renderReviews(); this.renderShop();
       window.addEventListener('resize',()=>this.fitTouch());
       window.addEventListener('orientationchange',()=>{ this.fitTouch(); if(global.SP_Engine&&SP_Engine.fitCanvas) SP_Engine.fitCanvas(); });
       document.addEventListener('fullscreenchange',()=>{ this.fitTouch(); if(global.SP_Engine&&SP_Engine.fitCanvas) SP_Engine.fitCanvas(); });
@@ -200,6 +200,7 @@
         $('#levelInfo').innerHTML='<strong>'+L.name+'</strong><br>'+L.tip+'<br>⏱ par '+L.timeLimit+'s · 🪙 '+L.coins.length+' shards · ★ 1 relic'+(L.isBoss?'<br>☠ BOSS: '+L.boss.name+' ('+L.boss.hp+' HP)':'');
         const nx=n<50?SP_Levels.levelName(n+1):'— you finished! —';
         $('#upNext').textContent=n<50?nx:'Final level complete!';
+        this.renderShop(); // fresh per-level coins + cleared effects
       } },90);
     },
     togglePause(force){
@@ -210,6 +211,7 @@
       this.paused=want;
       SP_Engine.setPaused(this.paused);
       $('#pauseOverlay').classList.toggle('hidden',!this.paused);
+      if(this.paused) this.updateShopBalances(true); // pause-menu shop shows live balance
       SP_Audio.setState(this.paused?'paused':'resumed'); // duck / unduck level music
       SP_Audio.sfx('click');
     },
@@ -223,13 +225,14 @@
       $('#hudScore').textContent=h.score; $('#hudCoins').textContent=h.coins+'/'+h.total;
       $('#hudLives').textContent=h.lives+' ('+h.hp+'♥)'; $('#hudTime').textContent=this.fmtTime(h.time);
       $('#hudLevel').textContent=h.world+'-'+(((h.level-1)%5)+1)+' · Lv'+h.level; $('#hudPower').textContent=h.power;
+      this.updateShopBalances(); // cheap: cached signature, DOM only on change
     },
     fmtTime(s){ s=Math.max(0,Math.ceil(s)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); },
     onComplete(res){
       const n=this.currentLevel;
       const rec=SP_Save.recordLevel(n,{score:res.score,coins:res.coins,totalCoins:res.totalCoins,relic:res.relic,time:res.time});
       this.renderLevelSelect(); this.refreshHero();
-      $('#completeStats').innerHTML='<div>⭐ Score<b>'+res.score+'</b></div><div>🪙 Shards<b>'+res.coins+'/'+res.totalCoins+'</b></div><div>★ Relic<b>'+(res.relic?'FOUND':'missed')+'</b></div><div>🕵 Secrets<b>'+res.secrets+'</b></div><div>⏱ Time<b>'+this.fmtTime(res.time)+'</b></div><div>❤ Lives left<b>'+res.lives+'</b></div>';
+      $('#completeStats').innerHTML='<div>⭐ Score<b>'+res.score+'</b></div><div>🪙 Collected<b>'+res.coins+'/'+res.totalCoins+'</b></div><div>🛒 Spent<b>'+(res.spent||0)+' (left '+(res.remaining||0)+')</b></div><div>★ Relic<b>'+(res.relic?'FOUND':'missed')+'</b></div><div>🕵 Secrets<b>'+res.secrets+'</b></div><div>⏱ Time<b>'+this.fmtTime(res.time)+'</b></div><div>❤ Lives left<b>'+res.lives+'</b></div>';
       $('#newBest').classList.toggle('hidden',!rec.isBest);
       SP_Audio.setState('complete'); // music fades out + completion jingle, then silence
       if(n>=50){ this.showEnding(res); return; }
@@ -285,6 +288,67 @@
       $('#statCoins').textContent=d.totalCoins;
       $('#statRelics').textContent=d.totalRelics+'/50';
       $('#statScore').textContent=d.totalScore;
+    },
+    /* ----- power-up shop (per-level coins, runtime only) ----- */
+    renderShop(){
+      const E=global.SP_Engine;
+      const catalog=(E&&E.SHOP)||[];
+      ['#shopGrid','#shopPauseGrid'].forEach(sel=>{
+        const g=$(sel); if(!g) return;
+        g.innerHTML='';
+        catalog.forEach(item=>{
+          const card=document.createElement('div'); card.className='shop-card'; card.setAttribute('data-shop',item.id);
+          const ico=document.createElement('div'); ico.className='shop-ico'; ico.textContent=item.icon;
+          const nm=document.createElement('div'); nm.className='shop-name'; nm.textContent=item.name;
+          const ds=document.createElement('div'); ds.className='shop-desc'; ds.textContent=item.desc;
+          const pr=document.createElement('div'); pr.className='shop-price'; pr.textContent=item.price+' 🪙';
+          const btn=document.createElement('button'); btn.className='btn btn-gold btn-sm shop-buy'; btn.type='button';
+          btn.setAttribute('aria-label','Buy '+item.name+' for '+item.price+' coins');
+          btn.textContent='BUY';
+          btn.addEventListener('click',()=>this.buyShop(item.id));
+          card.appendChild(ico); card.appendChild(nm); card.appendChild(ds); card.appendChild(pr); card.appendChild(btn);
+          g.appendChild(card);
+        });
+      });
+      this._shopCache=null;
+      this.updateShopBalances(true);
+    },
+    updateShopBalances(force){
+      const E=global.SP_Engine;
+      if(!E||!E.SHOP) return;
+      const coins=E.levelCoins||0;
+      const shieldOn=!!(E.player&&E.player.shield);
+      const sig=coins+'|'+E.lives+'|'+(shieldOn?1:0);
+      if(!force&&sig===this._shopCache) return; // onHud ticks every frame: no DOM churn
+      const prevCoins=this._shopCache?parseInt(String(this._shopCache).split('|')[0],10)||0:coins;
+      this._shopCache=sig;
+      const s1=$('#shopCoinsSide'), s2=$('#shopCoinsPause');
+      if(s1) s1.textContent=String(coins);
+      if(s2) s2.textContent=String(coins);
+      Array.from(document.querySelectorAll('.shop-card')).forEach(card=>{
+        const id=card.getAttribute('data-shop');
+        const item=E.SHOP.find(i=>i.id===id); if(!item) return;
+        const btn=card.querySelector('button'); if(!btn) return;
+        let owned=false;
+        if(id==='shield'&&shieldOn) owned=true;
+        if(id==='life'&&E.lives>=5) owned=true;
+        const afford=coins>=item.price;
+        btn.disabled=!afford||owned;
+        btn.textContent=owned?'ACTIVE ✓':('BUY · '+item.price+' 🪙');
+        card.classList.toggle('owned',owned);
+      });
+      if(prevCoins>coins){ // a purchase just landed: lightweight bump, no layout shift
+        Array.from(document.querySelectorAll('.shop-balance')).forEach(b=>{
+          b.classList.remove('bump'); void b.offsetWidth; b.classList.add('bump');
+        });
+      }
+    },
+    buyShop(id){
+      try{ SP_Audio.init(SP_Save.data.settings); SP_Audio.resume(); }catch(e){}
+      const res=SP_Engine.buyPower(id);
+      if(res.ok){ this.toast('★ '+res.msg+' ('+res.remaining+' 🪙 left)'); }
+      else { this.toast(res.msg); try{ SP_Audio.sfx('hurt'); }catch(e){} }
+      this.updateShopBalances(true);
     },
     /* ----- reviews (GLOBAL shared database) ----- */
     bindReviews(){

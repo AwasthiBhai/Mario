@@ -233,6 +233,8 @@
           <div class="panel"><h2>⏸ Paused</h2>
             <button class="btn btn-gold btn-block" data-action="resume">RESUME</button>
             <button class="btn btn-ghost btn-block" data-action="restart">RESTART</button>
+            <div class="shop-balance">🛒 Power-Ups · 🪙 <b id="shopCoinsPause">0</b> this level</div>
+            <div id="shopPauseGrid" class="shop-grid"></div>
             <button class="btn btn-ghost btn-block" data-nav="settings">SETTINGS</button>
             <button class="btn btn-ghost btn-block" data-nav="levels">LEVEL SELECT</button>
             <button class="btn btn-ghost btn-block" data-action="tomenu">MAIN MENU</button>
@@ -267,6 +269,11 @@
     </div>
     <aside class="game-side">
       <details class="card game-acc" open><summary><span class="acc-title">This level</span><span class="acc-chev" aria-hidden="true">▾</span></summary><div id="levelInfo" class="muted">—</div></details>
+      <details class="card game-acc" open><summary><span class="acc-title">🛒 Power-Ups</span><span class="acc-chev" aria-hidden="true">▾</span></summary>
+        <div class="shop-balance">Current level coins: <strong>🪙 <span id="shopCoinsSide">0</span></strong></div>
+        <div id="shopGrid" class="shop-grid"></div>
+        <p class="muted shop-note"><small>Coins reset every level — spend them before the goal!</small></p>
+      </details>
       <details class="card game-acc" open><summary><span class="acc-title">Quick settings</span><span class="acc-chev" aria-hidden="true">▾</span></summary>
         <label class="slider-row">Music <input id="qMusic" type="range" min="0" max="100" value="70"></label>
         <label class="slider-row">SFX <input id="qSfx" type="range" min="0" max="100" value="80"></label>
@@ -389,17 +396,7 @@
       <div class="studio-name">BUNDLAL STUDIOS</div>
       <p class="muted"><small>Small team · Big skies</small></p>
     </div>
-    <div class="creators-block">
-      <h3 class="creators-title">✦ GAME CREATOR ✦</h3>
-      <div class="creators-grid">
-        <div class="card creator-card">
-          <div class="creator-avatar" aria-hidden="true">KA</div>
-          <div class="creator-name">Karan Awasthi</div>
-          <div class="creator-badge">★ GAME CREATOR ★</div>
-          <div class="creator-role">Game Creator / Developer</div>
-        </div>
-      </div>
-    </div>
+    <div class="card center team-card"><div class="creator-avatar" aria-hidden="true">✦</div><div class="creator-name">BundLal Studios</div><div class="creator-badge">★ DEVELOPMENT TEAM ★</div><div class="creator-role">Design · Code · Art · Audio</div></div>
     <div class="card"><h3>Game Design</h3><p>BundLal Studios — level systems, difficulty curve, boss encounters, economy & secrets</p>
       <h3>Programming</h3><p>BundLal Studios — engine, physics, camera, AI, procedural level builder, save & input systems (vanilla JS + Canvas)</p>
       <h3>Art & Animation</h3><p>BundLal Studios — 100% original vector/canvas art: Pip the lantern-fox, 7 critters, 10 bosses, 10 world themes, particles & logo (no third-party sprites)</p>
@@ -409,7 +406,7 @@
       <h3>Special Thanks</h3><p>Playtesters everywhere · the open web · platformer classics for inspiration (all content here is original)</p>
       <h3>Asset Attribution</h3><p>No third-party game assets used. Fonts: Baloo 2 & Nunito under SIL Open Font License 1.1. All code, art and audio created for this project.</p>
     </div>
-    <div class="card center"><h3>BundLal Studios</h3><p class="muted">Created by Karan Awasthi</p><button class="btn btn-gold" data-nav="home">← Back home</button></div>
+    <div class="card center"><h3>BundLal Studios</h3><p class="muted">An original browser adventure</p><button class="btn btn-gold" data-nav="home">← Back home</button></div>
   </div>
 </section>
 

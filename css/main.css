@@ -1007,10 +1007,53 @@ kbd {
   padding: clamp(18px, 4.5vw, 34px) 0
 }
 
+/* ---- global card/section stack spacing ----
+   Stacked cards/sections in normal flow had zero margin, so borders
+   touched edge-to-edge. These stacks now use the shared spacing scale
+   (--gap / --gap-lg), which is already responsive (desktop→mobile,
+   portrait→landscape) and can never overflow horizontally. */
+.wrap.narrow,
+#view-levels .wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-lg);
+}
+
+#view-levels .wrap {
+  gap: var(--gap);
+}
+
+.wrap.narrow>*,
+#view-levels .wrap>* {
+  margin-top: 0;
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+#levelWorlds {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-lg);
+  min-width: 0;
+}
+
+#levelWorlds>* {
+  margin-top: 0;
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+/* world blocks are spaced by the #levelWorlds gap now (no double margin) */
+.world-block {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+/* grids use the shared scale too, so card gutters stay consistent */
 .cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 14px
+  gap: var(--gap-lg)
 }
 
 .card {
@@ -1068,7 +1111,7 @@ kbd {
 .world-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px
+  gap: var(--gap)
 }
 
 .world-card {
@@ -1498,7 +1541,7 @@ body.show-touch .touch {
 .level-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px
+  gap: var(--gap)
 }
 
 .level-card {
@@ -1622,6 +1665,15 @@ body.show-touch .touch {
   max-width: 440px;
   width: 100%;
   margin-inline: auto
+}
+
+/* studio team card (replaces the old single-creator block): same premium
+   treatment, centered, never an empty grid */
+.team-card {
+  max-width: 440px;
+  width: 100%;
+  margin-inline: auto;
+  border: 1px solid var(--gold);
 }
 
 .creator-card {
@@ -1946,7 +1998,7 @@ body.show-touch .touch {
 
 .rev-list {
   display: grid;
-  gap: 12px
+  gap: var(--gap)
 }
 
 .rev-card {
@@ -2880,4 +2932,99 @@ body.show-touch .canvas-wrap:fullscreen .touch {
 @media (max-width: 480px) {
   .hero-title-starbound { letter-spacing: 1px; }
   .brand-logo { height: 26px; max-width: 34vw; }
+}
+
+/* ============================================================
+   POWER-UP SHOP — theme-aware, responsive, no horizontal scroll
+   Side panel (280px) collapses to 1 column; pause panel shows 2.
+   ============================================================ */
+.shop-balance {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px 12px;
+  margin: 8px 0 4px;
+  font-weight: 700;
+  font-size: .9rem;
+  text-align: center;
+}
+
+.shop-balance strong,
+.shop-balance b {
+  color: var(--gold-text);
+}
+
+.shop-balance.bump {
+  animation: shopBump .3s ease;
+}
+
+@keyframes shopBump {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+.shop-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--gap);
+  margin: 8px 0;
+  min-width: 0;
+}
+
+.panel .shop-grid {
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+}
+
+.shop-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 8px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: center;
+  min-width: 0;
+}
+
+.shop-card.owned {
+  border-color: var(--mint);
+}
+
+.shop-ico {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.shop-name {
+  font-family: var(--font-d);
+  font-weight: 800;
+  font-size: .82rem;
+  letter-spacing: .4px;
+  overflow-wrap: anywhere;
+}
+
+.shop-desc {
+  font-size: .72rem;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.shop-price {
+  font-weight: 800;
+  color: var(--gold-text);
+  font-size: .85rem;
+}
+
+.shop-buy:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+  filter: grayscale(.5);
+  transform: none;
+}
+
+.shop-note {
+  margin: 4px 0 0;
 }

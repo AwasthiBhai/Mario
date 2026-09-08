@@ -47,7 +47,7 @@
         const hk=W.hazard;
         if(r()<0.6) hazards.push({x:gx+8,y:GROUND_Y+44,w:gw-16,h:30,kind:(hk==='lava'||hk==='poison')?hk:'pit'});
         const nArc=3+Math.floor(r()*3);
-        for(let i=0;i<nArc;i++) coins.push({x:gx+10+i*(gw-20)/Math.max(1,nArc-1),y:GROUND_Y-70-Math.sin(i/(nArc-1)*Math.PI)*50,taken:false});
+        for(let i=0;i<nArc;i++) coins.push({x:gx+10+i*(gw-20)/Math.max(1,nArc-1),y:GROUND_Y-58-Math.sin(i/(nArc-1)*Math.PI)*38,taken:false});
         x+=gap;
       }
       const gw2=last?560:segW;
@@ -55,10 +55,13 @@
       const gyC=Math.max(380,Math.min(490,gy));
       solids.push({x,y:gyC,w:gw2,h:200,type:'ground'});
       const cx=x+gw2/2;
-      // platforms above
+      // platforms above — capped so every platform is reachable with a normal
+      // full-hold jump (jump height ≈115px: 745²/2·2400). Max rise is 95px,
+      // so the tallest rolls still need a good jump without ever requiring
+      // glitches, springs or pixel-perfect runs. Jump physics untouched.
       const nPlat=1+Math.floor(r()*(1+diff*3));
       for(let p=0;p<nPlat;p++){
-        const px=x+20+r()*(gw2-120), py=gyC-90-r()*(60+diff*110);
+        const px=x+20+r()*(gw2-120), py=gyC-58-r()*(22+diff*15);
         const kindRoll=r();
         let type='block';
         if(kindRoll<0.30-0.1*diff) type='block';
@@ -70,14 +73,15 @@
         else type='hidden';
         const w=type==='oneway'?110:70+r()*70;
         const s2={x:px,y:py,w,h:22,type};
-        if(type==='move'){ s2.axis=r()<0.7?'x':'y'; s2.range=50+r()*90; s2.speed=0.7+r()*1.4+diff; s2.phase=r()*6.28; s2.ox=px; s2.oy=py; }
+        if(type==='move'){ s2.axis=r()<0.7?'x':'y'; s2.range=s2.axis==='y'?25+r()*35:35+r()*45; s2.speed=0.7+r()*1.4+diff; s2.phase=r()*6.28; s2.ox=px; s2.oy=py; }
         if(type==='fall'){ s2.respawn=4; }
         solids.push(s2);
         if(r()<0.55) coins.push({x:px+w/2,y:py-34,taken:false});
         if(!secretPlaced&&r()<0.10&&type==='hidden'){ // secret cache above hidden block
-          secretPlaced=true;
-          for(let k=0;k<5;k++) coins.push({x:px-40+k*26,y:py-90,taken:false,secret:true});
-          powerups.push({x:px+w/2,y:py-120,kind:pick(r,['shield','heart','star']),secret:true,taken:false});
+          secretPlaced=true; // standing on the revealed block (jump ≈115px),
+          // both the coins and the gift stay comfortably in reach
+          for(let k=0;k<5;k++) coins.push({x:px-40+k*26,y:py-80,taken:false,secret:true});
+          powerups.push({x:px+w/2,y:py-95,kind:pick(r,['shield','heart','star']),secret:true,taken:false});
         }
       }
       // enemies on this ground
@@ -94,20 +98,26 @@
       // coin lines / arcs on ground
       if(r()<0.7){ const n=3+Math.floor(r()*4); const bx=x+20+r()*Math.max(10,gw2-120);
         for(let i=0;i<n;i++) coins.push({x:bx+i*30,y:gyC-50-Math.abs(i-(n-1)/2)*6,taken:false}); }
-      // relic: hide in one segment (higher / off-path in later levels)
+      // relic: hide in one segment — always within a normal jump of the ground
       if(!relic&&((s===Math.floor(nSeg/2)&&r()<0.6)||s===nSeg-2)){
-        relic={x:x+gw2/2,y:gyC-170-(diff*60),taken:false};
+        relic={x:x+gw2/2,y:gyC-88-r()*14,taken:false};
       }
       x+=gw2;
     }
     // checkpoints every ~quarter
     const nCp=2+Math.floor(diff*2);
     for(let i=1;i<=nCp;i++){ const px2=(width-700)*i/(nCp+1)+200; checkpoints.push({x:px2,y:0,on:false}); }
-    // powerups: one early, one mid; boss levels get star before arena
-    powerups.push({x:560,y:GROUND_Y-120,kind:num<4?'heart':pick(r,['heart','shield']),taken:false});
-    powerups.push({x:width*0.5,y:GROUND_Y-200,kind:pick(r,['star','spring','speed','shield']),taken:false});
-    if(isBoss) powerups.push({x:width-900,y:GROUND_Y-140,kind:'star',taken:false});
-    if(!relic) relic={x:width*0.6,y:GROUND_Y-220,taken:false};
+    // powerups: snapped 70px above the actual ground beneath them, so every
+    // gift is collectible with a normal jump (jump height ≈115px)
+    function groundTopAtX(px){
+      let best=GROUND_Y;
+      for(const s of solids){ if(s.type==='ground'&&px>=s.x&&px<=s.x+s.w&&s.y<best) best=s.y; }
+      return best;
+    }
+    powerups.push({x:560,y:groundTopAtX(560)-70,kind:num<4?'heart':pick(r,['heart','shield']),taken:false});
+    powerups.push({x:width*0.5,y:groundTopAtX(width*0.5)-70,kind:pick(r,['star','spring','speed','shield']),taken:false});
+    if(isBoss) powerups.push({x:width-900,y:groundTopAtX(width-900)-70,kind:'star',taken:false});
+    if(!relic) relic={x:width*0.6,y:groundTopAtX(width*0.6)-95,taken:false};
     // goal
     const goal={x:width-260,y:GROUND_Y-160};
     // boss arena: flatten end + walls
