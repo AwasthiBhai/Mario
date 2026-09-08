@@ -262,15 +262,22 @@
       if(p.win>0){ p.win-=dt; p.vx*=0.9; p.vy+=GRAV*dt; p.y+=p.vy*dt; return; }
       p.anim+=dt; p.iframes=Math.max(0,p.iframes-dt);
       p.speedT=Math.max(0,p.speedT-dt); p.jumpT=Math.max(0,p.jumpT-dt); p.starT=Math.max(0,p.starT-dt); p.magnetT=Math.max(0,(p.magnetT||0)-dt); p.invT=Math.max(0,(p.invT||0)-dt); p.shootCd=Math.max(0,p.shootCd-dt);
+      // Crouch uses the SAME remappable input as Settings (In.down('down')).
+      // Computed before movement so the speed cap applies the same frame the
+      // key goes down; keyup clears it via keys[] the same frame.
+      const crouching=In.down('down')&&p.onGround;
+      p.crouch=crouching;
       const run=In.down('run')||p.speedT>0;
-      const max=run?330:210;
-      const acc=p.onGround?2200:1500;
+      let max=run?330:210;
+      let acc=p.onGround?2200:1500;
+      // Intended crouch behavior: slow creep + low profile. No hitbox change
+      // (keeps collision/saves/checkpoints stable); speed + pose are the tells.
+      if(crouching){ max=Math.min(max,90); acc=1200; }
       let move=0;
       if(In.down('left')) move-=1; if(In.down('right')) move+=1;
       if(move!==0){ p.vx+=move*acc*dt; p.face=move; if(p.onGround&&Math.abs(p.vx)>240&&Math.random()<0.2&&!this.settings.reducedMotion) this.parts.push({x:p.x+p.w/2,y:p.y+p.h,vx:-move*40,vy:-60,t:0.4,color:'#ffffff88',sz:3}); }
       else { const f=p.onGround?1800:500; p.vx-=Math.sign(p.vx)*Math.min(Math.abs(p.vx),f*dt); }
       p.vx=Math.max(-max,Math.min(max,p.vx));
-      p.crouch=In.down('down')&&p.onGround;
       // jumping: buffer + coyote
       if(In.consumeJumpBuffer()) p.jbuf=0.14; else p.jbuf=Math.max(0,p.jbuf-dt);
       p.coyote=p.onGround?0.11:Math.max(0,p.coyote-dt);
@@ -296,8 +303,8 @@
         p.shootCd=0.28; global.SP_Audio.sfx('shoot');
         this.shots.push({x:p.x+p.w/2+p.face*16,y:p.y+14,vx:p.face*560,w:12,h:8,t:1.4});
       }
-      // state
-      p.state=!p.onGround?(p.vy<0?'jump':'fall'):(Math.abs(p.vx)>250?'run':Math.abs(p.vx)>20?'walk':(p.crouch?'crouch':'idle'));
+      // state (crouch wins on the ground so the pose is visible even while creeping)
+      p.state=!p.onGround?(p.vy<0?'jump':'fall'):(p.crouch?'crouch':(Math.abs(p.vx)>250?'run':Math.abs(p.vx)>20?'walk':'idle'));
       // interactions
       const L=this.level, me={x:p.x-4,y:p.y-4,w:p.w+8,h:p.h+8};
       const magR=p.magnetT>0?150:0, pcx=p.x+p.w/2, pcy=p.y+p.h/2;
@@ -718,7 +725,8 @@
       c.save(); if(blink) c.globalAlpha=0.45;
       const cx=p.x+p.w/2, feet=p.y+p.h;
       c.fillStyle='rgba(0,0,0,0.32)'; c.beginPath(); c.ellipse(cx,feet+4,p.w/2,5,0,0,7); c.fill();
-      const squash=p.state==='jump'?0.92:(p.state==='fall'?1.06:1+Math.sin(p.anim*10)*0.02);
+      // crouch has a real low pose (visual only; hitbox unchanged so physics/saves stay stable)
+      const squash=p.state==='crouch'?0.72:(p.state==='jump'?0.92:(p.state==='fall'?1.06:1+Math.sin(p.anim*10)*0.02));
       c.translate(cx,feet); c.scale(p.face,1); c.scale(1,squash); c.translate(-cx,-feet);
       // tail
       const wag=Math.sin(p.anim*8)*6;
