@@ -225,7 +225,15 @@
       const show=!!(touchCapable&&portrait&&this.view==='game'&&this.inGame&&!this._chipHide);
       chip.classList.toggle('hidden',!show);
     },
-    fullscreen(){ const wrap=document.getElementById('canvasWrap'); const el=(wrap&&wrap.requestFullscreen)?wrap:document.documentElement; try{ if(!document.fullscreenElement){ const p=el.requestFullscreen(); if(p&&p.catch) p.catch(()=>{}); } else document.exitFullscreen(); }catch(e){} },
+    /* Fullscreen target depends on context (freeze fix): the game view keeps the
+       game wrapper (existing behavior); any other view (e.g. Settings) uses the
+       document, otherwise the browser would paint the hidden game layer over
+       the page and it would look frozen and uninteractable. */
+    fullscreen(){
+      const wrap=this.view==='game'?document.getElementById('canvasWrap'):null;
+      const el=(wrap&&wrap.requestFullscreen)?wrap:document.documentElement;
+      try{ if(!document.fullscreenElement){ const p=el.requestFullscreen(); if(p&&p.catch) p.catch(()=>{}); } else document.exitFullscreen(); }catch(e){}
+    },
     /* ----- game flow ----- */
     startLevel(n,keepScore){
       n=Math.max(1,Math.min(50,n));
@@ -242,7 +250,7 @@
       const nx=n<50?SP_Levels.levelName(n+1):'— you finished! —';
       $('#upNext').textContent=n<50?nx:'Final level complete!';
       this.renderShop(); // fresh per-level coins + cleared effects
-      const tips=['Hold SHIFT to run farther.','Stomp = bounce high. Hold jump!','Bump suspicious walls — secrets hide.','Starbolt (E) beats Shellyhorns.','Checkpoints save you. Touch them!','Relics are worth 500 + bragging rights.','Falling platforms respawn. Keep calm.','Bosses telegraph hops — bait, dodge, stomp.'];
+      const tips=['Run to jump farther.','Stomp = bounce high. Hold jump!','Bump suspicious walls — secrets hide.','Starbolts beat Shellyhorns.','Checkpoints save you. Touch them!','Relics are worth 500 + bragging rights.','Falling platforms respawn. Keep calm.','Bosses telegraph hops — bait, dodge, stomp.'];
       $('#loaderTip').textContent='Tip: '+tips[n%tips.length];
       $('#loader').classList.remove('hidden');
       // Smooth deterministic loader (~2.6s): time-based eased progress, so it
@@ -348,7 +356,6 @@
       $('#statProgress').textContent=SP_Save.completedCount()+'/50';
       $('#statCoins').textContent=d.totalCoins;
       $('#statRelics').textContent=d.totalRelics+'/50';
-      $('#statScore').textContent=d.totalScore;
     },
     /* ----- power-up shop (per-level coins, runtime only) ----- */
     renderShop(){
@@ -474,7 +481,7 @@
         if(status){
           if(!res.ok){ status.className='rev-status error'; status.textContent='⚠ '+res.error; if(retry) retry.classList.remove('hidden'); }
           else if(res.stale){ status.className='rev-status stale'; status.textContent='⚠ '+res.error; if(retry) retry.classList.remove('hidden'); }
-          else { status.className='rev-status live'; status.textContent='🌍 Live — shared by players everywhere'; }
+          else { status.className='rev-status live'; status.textContent=''; status.classList.add('hidden'); }
         }
         list.innerHTML='';
         if(!arr.length){
@@ -516,8 +523,7 @@
       const s=SP_Save.data.settings;
       $('#setMaster').value=s.master; $('#setMusic').value=s.music; $('#setSfx').value=s.sfx;
       $('#setMasterV').textContent=s.master; $('#setMusicV').textContent=s.music; $('#setSfxV').textContent=s.sfx;
-      $('#setMute').checked=!!s.muted; $('#setMotion').checked=!!s.reducedMotion;
-      $('#setShake').checked=s.shake!==false;
+      $('#setMute').checked=!!s.muted;
       $('#qMusic').value=s.music; $('#qSfx').value=s.sfx; this._syncTouchChecks(); $('#qMotion').checked=!!s.reducedMotion;
       this.renderKeymap();
       SP_Engine.settings.shake=s.shake!==false; SP_Engine.settings.reducedMotion=!!s.reducedMotion;
@@ -530,8 +536,6 @@
       $('#setSfx').addEventListener('input',e=>{ s().sfx=+e.target.value; $('#setSfxV').textContent=e.target.value; SP_Save.write(); SP_Audio.setVolumes(s()); });
       $('#setMute').addEventListener('change',e=>{ s().muted=e.target.checked; SP_Save.write(); SP_Audio.setVolumes(s()); });
       $('#setTouch').addEventListener('change',e=>{ const v=e.target.checked, st=s(); st.touch=v; st.touchOff=!v; SP_Save.write(); this._syncTouchChecks(); this.fitTouch(); });
-      $('#setMotion').addEventListener('change',e=>{ s().reducedMotion=e.target.checked; SP_Save.write(); SP_Engine.settings.reducedMotion=e.target.checked; document.body.classList.toggle('reduced-motion',e.target.checked); });
-      $('#setShake').addEventListener('change',e=>{ s().shake=e.target.checked; SP_Save.write(); SP_Engine.settings.shake=e.target.checked; });
       $('#btnFullscreen').addEventListener('click',()=>this.fullscreen());
       $('#btnReplayIntro').addEventListener('click',()=>{ SP_Intro.replay(); });
       $('#btnResetSave').addEventListener('click',()=>{ if(confirm('Reset ALL progress and settings?')){ SP_Save.reset(); SP_Save.write(); this.carryScore=0; this.applySettingsToDom(); this.renderLevelSelect(); this.refreshHero(); this.renderReviews(); alert('Progress wiped. Fresh adventure awaits!'); } });

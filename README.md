@@ -43,7 +43,7 @@ There is no build. The repository root **is** the website:
 
 | File            | Purpose                              |
 | --------------- | ------------------------------------ |
-| `index.html`    | All views: Home, Game, Levels, Reviews, How to Play, Settings, Credits, About |
+| `index.html`    | All views: Home, Game, Levels, Reviews, Settings, Credits, About |
 | `css/main.css`  | Full responsive stylesheet           |
 | `js/levels.js`  | Deterministic procedural 50-level builder (all level data ships in-JS) |
 | `js/engine.js`  | Platformer engine, physics, camera, enemies, bosses |

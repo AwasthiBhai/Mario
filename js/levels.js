@@ -2,7 +2,7 @@
 (function(global){
   'use strict';
   const WORLDS=[
-    {name:'Ember Meadow',icon:'🌿',sky:['#7ec8ff','#cdeec0','#5da85f'],ground:'#4c8a3f',groundTop:'#7ed957',plat:'#8a5a2b',hazard:'spikes',weather:'petals',music:0,tip:'Welcome home, Pip! Hold SHIFT to run.'},
+    {name:'Ember Meadow',icon:'🌿',sky:['#7ec8ff','#cdeec0','#5da85f'],ground:'#4c8a3f',groundTop:'#7ed957',plat:'#8a5a2b',hazard:'spikes',weather:'petals',music:0,tip:'Welcome home, Pip! Run and explore.'},
     {name:'Dewdrop Caverns',icon:'💧',sky:['#0b1e4b','#1c3f7a','#0e2a5e'],ground:'#2c3f66',groundTop:'#5DA6FF',plat:'#3f5a8a',hazard:'spikes',weather:'drips',music:1,tip:'Dark in here — relics glow. Look up!'},
     {name:'Cinder Dunes',icon:'🏜',sky:['#ffd98a','#ff9a5c','#c76b2b'],ground:'#b07a3a',groundTop:'#ffd98a',plat:'#7a4a1e',hazard:'sandspikes',weather:'sand',music:2,tip:'Sand gaps are wide — run before you leap.'},
     {name:'Frostfall Peaks',icon:'❄',sky:['#bfe6ff','#e8f6ff','#7fb2dd'],ground:'#5f7fa6',groundTop:'#ffffff',plat:'#3d5a7a',hazard:'icicles',weather:'snow',music:3,tip:'Icy and slippery. Tap, don\'t hold, on thin ridges.'},

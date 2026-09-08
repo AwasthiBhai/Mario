@@ -1369,17 +1369,6 @@ body.playing .canvas-wrap .touch {
   transform: scale(.9)
 }
 
-.touch .t-pause {
-  width: var(--tc-size);
-  height: var(--tc-size);
-  min-width: var(--tc-size);
-  min-height: var(--tc-size);
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, .35);
-  font-size: calc(var(--tc-size) * .28);
-  opacity: .7
-}
-
 body.show-touch .touch {
   display: flex
 }

@@ -369,7 +369,7 @@
       if(kind==='shield'){ p.shield=true; this.floater(p.x,p.y-20,'SHIELD!','#5DF2C8'); }
       if(kind==='speed'){ p.speedT=12; this.floater(p.x,p.y-20,'SWIFT!','#FFD166'); }
       if(kind==='spring'){ p.jumpT=12; this.floater(p.x,p.y-20,'SPRING!','#5DF2C8'); }
-      if(kind==='star'){ p.starT=25; this.floater(p.x,p.y-20,'STARBOLT! (E)','#FFC94D'); }
+      if(kind==='star'){ p.starT=25; this.floater(p.x,p.y-20,'STARBOLT!','#FFC94D'); }
       this.score+=100; this.burst(p.x,p.y,'#fff',12);
       if(this.cb.onHud) this.cb.onHud(this.hud());
     },

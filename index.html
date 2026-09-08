@@ -52,7 +52,7 @@
     <img class="loader-logo-img" src="./favicon.png" alt="STARBOUND logo" width="500" height="500">
     <div class="loader-logo">✦ STARBOUND ✦</div>
     <div class="loader-bar"><div id="loaderFill" class="loader-fill"></div></div>
-    <p id="loaderTip" class="loader-tip">Tip: Hold SHIFT to run farther and jump higher.</p>
+    <p id="loaderTip" class="loader-tip">Tip: Stomp critters to bounce high.</p>
   </div>
 </div>
 
@@ -67,7 +67,6 @@
     <button data-nav="game" class="nav-link">Game</button>
     <button data-nav="levels" class="nav-link">Levels</button>
     <button data-nav="reviews" class="nav-link">Reviews</button>
-    <button data-nav="howto" class="nav-link">How to Play</button>
     <button data-nav="settings" class="nav-link">Settings</button>
     <button data-nav="credits" class="nav-link">Credits</button>
     <button data-nav="about" class="nav-link">About</button>
@@ -81,7 +80,7 @@
 </header>
 <div id="mobileNav" class="mobile-nav hidden">
   <button data-nav="home">Home</button><button data-nav="game">Game</button>
-  <button data-nav="levels">Levels</button><button data-nav="reviews">Reviews</button><button data-nav="howto">How to Play</button>
+  <button data-nav="levels">Levels</button><button data-nav="reviews">Reviews</button>
   <button data-nav="settings">Settings</button><button data-nav="credits">Credits</button>
   <button data-nav="about">About</button>
   <button data-theme-toggle class="theme-menu-item"><span class="theme-ico" aria-hidden="true">☀</span> <span>Theme: Dark / Light</span></button>
@@ -108,7 +107,6 @@
           <div><strong id="statProgress">0/50</strong><span>levels cleared</span></div>
           <div><strong id="statCoins">0</strong><span>star shards</span></div>
           <div><strong id="statRelics">0/50</strong><span>relics</span></div>
-          <div><strong id="statScore">0</strong><span>best score</span></div>
         </div>
       </div>
       <div class="hero-art" aria-hidden="true">
@@ -158,19 +156,6 @@
   </div>
 
   <div class="section wrap split">
-    <div>
-      <h2>Controls</h2>
-      <div class="controls-table">
-        <div><kbd>A</kbd>/<kbd>←</kbd><span>Move left</span></div>
-        <div><kbd>D</kbd>/<kbd>→</kbd><span>Move right</span></div>
-        <div><kbd>W</kbd>/<kbd>↑</kbd>/<kbd>Space</kbd><span>Jump (hold = higher)</span></div>
-        <div><kbd>S</kbd>/<kbd>↓</kbd><span>Crouch / drop</span></div>
-        <div><kbd>Shift</kbd><span>Run</span></div>
-        <div><kbd>E</kbd>/<kbd>J</kbd><span>Starbolt action</span></div>
-        <div><kbd>Esc</kbd>/<kbd>P</kbd><span>Pause</span></div>
-      </div>
-      <button class="btn btn-ghost" data-nav="howto">Full guide →</button>
-    </div>
     <div class="card glow">
       <h3>About the game</h3>
       <p><strong>STARBOUND</strong> is a complete browser platformer built with canvas, vanilla JS modules and generative audio. No downloads, no accounts — your progress stays on this device.</p>
@@ -189,7 +174,7 @@
         <button class="btn btn-ghost btn-sm" data-nav="home">← Menu</button>
         <div class="game-title" id="gameTitleLabel">World 1 · Level 1</div>
         <div class="game-top-actions">
-          <button id="btnPauseTop" class="icon-btn" title="Pause (Esc)">⏸</button>
+          <button id="btnPauseTop" class="icon-btn" title="Pause">⏸</button>
           <button id="btnMuteGame" class="icon-btn" title="Mute">🔊</button>
           <button id="btnFull" class="icon-btn" title="Fullscreen">⛶</button>
         </div>
@@ -206,13 +191,13 @@
           <div class="hud-right">
             <span class="hud-pill">⏱ <b id="hudTime">0:00</b></span>
             <span class="hud-pill hud-sec" id="hudPower">✦</span>
-            <button id="btnPauseHud" class="hud-pill hud-btn" title="Pause menu (Esc)" aria-label="Open pause menu">⏸</button>
+            <button id="btnPauseHud" class="hud-pill hud-btn" title="Pause menu" aria-label="Open pause menu">⏸</button>
           </div>
         </div>
         <div id="rotateChip" class="rotate-chip hidden">🔄 Rotate for a bigger view — portrait plays fine too</div>
         <div id="touch" class="touch">
           <div class="t-left"><button data-t="left" aria-label="Move left">◀</button><button data-t="right" aria-label="Move right">▶</button></div>
-          <div class="t-right"><button data-t="jump" aria-label="Jump">▲</button><button data-t="pause" class="t-pause" aria-label="Pause">⏸</button></div>
+          <div class="t-right"><button data-t="jump" aria-label="Jump">▲</button></div>
         </div>
         <!-- overlays -->
         <div id="menuOverlay" class="overlay">
@@ -225,7 +210,6 @@
             <button class="btn btn-ghost btn-block" data-action="continue">CONTINUE</button>
             <button class="btn btn-ghost btn-block" data-action="newgame">NEW GAME</button>
             <button class="btn btn-ghost btn-block" data-nav="levels">LEVEL SELECT</button>
-            <button class="btn btn-ghost btn-block" data-nav="howto">HOW TO PLAY</button>
             <button class="btn btn-ghost btn-block" data-nav="settings">SETTINGS</button>
             <button class="btn btn-ghost btn-block" data-nav="credits">CREDITS</button>
           </div>
@@ -273,7 +257,6 @@
           </div>
         </div>
       </div>
-      <p class="hint" id="hintKbd">kbd: <kbd>A</kbd><kbd>D</kbd> move · <kbd>Space</kbd> jump · <kbd>Shift</kbd> run · <kbd>E</kbd> starbolt · <kbd>Esc</kbd> pause — gamepad supported</p>
       <p class="hint hidden" id="hintTouch">Touch controls</p>
     </div>
     <aside class="game-side">
@@ -324,32 +307,9 @@
         <p id="revOk" class="rev-ok" role="status"></p>
         <button class="btn btn-gold" type="submit">Submit review</button>
       </form>
-      <p class="muted"><small>🌍 Reviews are global — your review appears for every player as soon as it is saved. No account needed. If the server is unreachable, the game keeps working and you can retry.</small></p>
     </div>
     <h3>Latest reviews</h3>
     <div id="revList" class="rev-list"></div>
-  </div>
-</section>
-
-<!-- ============ HOW TO ============ -->
-<section id="view-howto" class="view">
-  <div class="wrap narrow">
-    <h2>How to Play</h2>
-    <div class="card"><h3>Goal</h3><p>Reach the <strong>sky-lantern beacon</strong> 🚩 at the end of each level. Grab <strong>star shards</strong> 🪙, find the hidden <strong>aether relic</strong> ★, touch <strong>checkpoints</strong> 🏁 so you respawn closer, and stomp or starbolt the critters.</p></div>
-    <div class="card"><h3>Controls</h3><div class="controls-table">
-      <div><kbd>A</kbd>/<kbd>←</kbd> or left stick<span>Move left</span></div>
-      <div><kbd>D</kbd>/<kbd>→</kbd> or left stick<span>Move right</span></div>
-      <div><kbd>W</kbd>/<kbd>↑</kbd>/<kbd>Space</kbd> or <kbd>A</kbd> button<span>Jump — hold for higher</span></div>
-      <div><kbd>S</kbd>/<kbd>↓</kbd><span>Crouch / fast-drop through one-ways</span></div>
-      <div><kbd>Shift</kbd> or <kbd>RT</kbd><span>Run (faster + longer jumps)</span></div>
-      <div><kbd>E</kbd>/<kbd>J</kbd> or <kbd>X</kbd><span>Fire starbolt (with power-up)</span></div>
-      <div><kbd>Esc</kbd>/<kbd>P</kbd> or Start<span>Pause</span></div>
-    </div>
-    <p class="muted">Remap keys in Settings. Touch buttons appear on mobile / when enabled.</p></div>
-    <div class="card"><h3>Critters</h3><p><strong>Muddle</strong> walks · <strong>Zipzap</strong> sprints · <strong>Flutterby</strong> flies sine waves · <strong>Boingwart</strong> hops · <strong>Shellyhorn</strong> armored (hit only with starbolt or when flashing) · <strong>Spitpea</strong> lobs seeds · <strong>Ticktock</strong> patrols platforms. Stomp = bounce kill (+100). Starbolt = +150.</p></div>
-    <div class="card"><h3>Platforms & hazards</h3><p>Static · moving · crumbly (fall) · breakable · bouncy 🍄 · hidden ❓ (bump from below). Hazards: spikes, lava, icicles, poison tide, lightning, void. Shields block one hit; falling in pits costs a life.</p></div>
-    <div class="card"><h3>Power-ups</h3><p>🍓 <strong>Heartberry</strong> +1 HP · 🛡 <strong>Aether Shield</strong> blocks a hit · 🍃 <strong>Swiftleaf</strong> speed · 🍄 <strong>Springshroom</strong> mega-jump · ✦ <strong>Starbolt</strong> shoot. Secrets & fast clears boost score.</p></div>
-    <div class="center"><button class="btn btn-gold btn-lg" data-action="play">▶ Play now</button></div>
   </div>
 </section>
 
@@ -373,10 +333,7 @@
       <label class="check-row"><input id="setMute" type="checkbox"> Mute all</label>
     </div>
     <div class="card">
-      <h3>Display & comfort</h3>
       <label class="check-row"><input id="setTouch" type="checkbox"> Always show touch controls (auto on touch devices)</label>
-      <label class="check-row"><input id="setMotion" type="checkbox"> Reduced motion (fewer particles)</label>
-      <label class="check-row"><input id="setShake" type="checkbox" checked> Screen shake</label>
       <div class="row2"><button class="btn btn-ghost" id="btnFullscreen">⛶ Fullscreen</button><button class="btn btn-ghost" id="btnReplayIntro">▶ Replay Studio Intro</button></div>
     </div>
     <div class="card">
@@ -430,7 +387,7 @@
 <footer class="footer">
   <div class="wrap foot-grid">
     <div><img class="foot-logo-img" src="./favicon.png" alt="STARBOUND logo" width="500" height="500"><strong>✦ STARBOUND</strong><br><span class="muted">Light every beacon. Reclaim the sky. · © 2026 BundLal Studios. All original content.</span></div>
-    <div class="foot-links"><button data-nav="game">Play</button><button data-nav="levels">Levels</button><button data-nav="reviews">Reviews</button><button data-nav="howto">Guide</button><button data-nav="settings">Settings</button><button data-nav="credits">Credits</button></div>
+    <div class="foot-links"><button data-nav="game">Play</button><button data-nav="levels">Levels</button><button data-nav="reviews">Reviews</button><button data-nav="settings">Settings</button><button data-nav="credits">Credits</button></div>
   </div>
 </footer>
 
