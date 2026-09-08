@@ -74,10 +74,25 @@
     },
     onKeyDown(code){
       if(this._confirmOpen) return; // modal owns Escape; never toggle pause under it
-      if(code==='Escape'||code==='KeyP'){
-        if(this.isMobileNavOpen()){ this.toggleMobileNav(false); return; }
-        this.togglePause();
-      }
+      if(this._capturingKey) return; // key-remap capture owns all keys; never toggle pause/nav
+      // Pause uses the SAME saved mapping as gameplay (Input.map.pause),
+      // normalized so ShiftLeft/ShiftRight/Esc legacy names all match.
+      try{
+        const In=global.SP_Input;
+        if(!In||!In.map) return;
+        const norm=(In.normCode?In.normCode(code,null):code);
+        let saved=In.map.pause||'Escape';
+        if(In.normCode) saved=In.normCode(saved,null);
+        if(In.storedToCode) saved=In.storedToCode(saved);
+        const isShift=(In.isShiftCode?In.isShiftCode(saved):(saved==='ShiftLeft'||saved==='ShiftRight'));
+        let isPause=false;
+        if(isShift) isPause=(norm==='ShiftLeft'||norm==='ShiftRight'||norm==='Shift');
+        else isPause=(norm===saved);
+        if(isPause){
+          if(this.isMobileNavOpen()){ this.toggleMobileNav(false); return; }
+          this.togglePause();
+        }
+      }catch(e){}
     },
     bindNav(){
       $$('[data-nav]').forEach(b=>b.addEventListener('click',()=>{ SP_Audio.init(SP_Save.data.settings); SP_Audio.resume(); SP_Audio.sfx('click'); this.show(b.getAttribute('data-nav')); }));
@@ -622,6 +637,13 @@
       $('#setMasterV').textContent=s.master; $('#setMusicV').textContent=s.music; $('#setSfxV').textContent=s.sfx;
       $('#setMute').checked=!!s.muted;
       $('#qMusic').value=s.music; $('#qSfx').value=s.sfx; this._syncTouchChecks(); $('#qMotion').checked=!!s.reducedMotion;
+      // Keep live Input.map in sync with the save (Reset Save wipes keys=null
+      // which means defaults). Without this the keymap UI would show stale
+      // remaps after a wipe until reload.
+      try{
+        if(!s.keys){ if(SP_Input.resetToDefaults) SP_Input.resetToDefaults(); else SP_Input.map=Object.assign({},SP_Input.DEFAULTS||{left:'KeyA',right:'KeyD',jump:'Space',down:'KeyS',run:'ShiftLeft',action:'KeyE',pause:'Escape',altJump:'KeyW'}); }
+        else SP_Input.loadMap(s.keys);
+      }catch(e){}
       this.renderKeymap();
       SP_Engine.settings.shake=s.shake!==false; SP_Engine.settings.reducedMotion=!!s.reducedMotion;
       document.body.classList.toggle('reduced-motion',!!s.reducedMotion);
@@ -635,19 +657,30 @@
       $('#setTouch').addEventListener('change',e=>{ const v=e.target.checked, st=s(); st.touch=v; st.touchOff=!v; SP_Save.write(); this._syncTouchChecks(); this.fitTouch(); });
       $('#btnFullscreen').addEventListener('click',()=>this.fullscreen());
       $('#btnReplayIntro').addEventListener('click',()=>{ SP_Intro.replay(); });
-      $('#btnResetSave').addEventListener('click',()=>{ this.confirmDialog({title:'Reset all progress?',message:'Unlocks, scores, coins, relics and settings are wiped.',okText:'Reset everything'}).then(ok=>{ if(!ok) return; SP_Save.reset(); SP_Save.write(); this.carryScore=0; this.applySettingsToDom(); this.renderLevelSelect(); this.refreshHero(); this.renderReviews(); this.notify('Progress wiped. Fresh adventure awaits!','success'); }); });
-      $('#btnResetKeys').addEventListener('click',()=>{ s().keys=null; SP_Input.map=Object.assign({},SP_Input.map={left:'KeyA',right:'KeyD',jump:'Space',down:'KeyS',run:'ShiftLeft',action:'KeyE',pause:'Escape',altJump:'KeyW'}); SP_Save.write(); this.renderKeymap(); });
+      $('#btnResetSave').addEventListener('click',()=>{ this.confirmDialog({title:'Reset all progress?',message:'Unlocks, scores, coins, relics and settings are wiped.',okText:'Reset everything'}).then(ok=>{ if(!ok) return; SP_Save.reset(); SP_Save.write(); try{ if(SP_Input.resetToDefaults) SP_Input.resetToDefaults(); }catch(e){} this.carryScore=0; this.applySettingsToDom(); this.renderLevelSelect(); this.refreshHero(); this.renderReviews(); this.notify('Progress wiped. Fresh adventure awaits!','success'); }); });
+      $('#btnResetKeys').addEventListener('click',()=>{ const D=(SP_Input.DEFAULTS||{left:'KeyA',right:'KeyD',jump:'Space',down:'KeyS',run:'ShiftLeft',action:'KeyE',pause:'Escape',altJump:'KeyW'}); s().keys=null; if(SP_Input.resetToDefaults) SP_Input.resetToDefaults(); else SP_Input.map=Object.assign({},D); SP_Save.write(); this.renderKeymap(); });
     },
     renderKeymap(){
       const labels={left:'Move left',right:'Move right',jump:'Jump',down:'Crouch',run:'Run',action:'Action',pause:'Pause'};
+      const pretty=(SP_Input&&SP_Input.prettyCode)?SP_Input.prettyCode:(c=>(c||'').replace('Key',''));
       const km=$('#keymap'); km.innerHTML='';
       for(const k in labels){
         const row=document.createElement('div');
         row.innerHTML='<span>'+labels[k]+'</span>';
-        const btn=document.createElement('button'); btn.textContent=(SP_Input.map[k]||'').replace('Key','');
+        const btn=document.createElement('button'); btn.textContent=pretty(SP_Input.map[k]||'');
+        btn.setAttribute('aria-label','Remap '+labels[k]+', current '+btn.textContent);
         btn.addEventListener('click',()=>{
           btn.textContent='press…';
-          const h=e=>{ e.preventDefault(); SP_Input.map[k]=e.code; SP_Save.data.settings.keys=Object.assign({},SP_Input.map); SP_Save.write(); this.renderKeymap(); window.removeEventListener('keydown',h,true); };
+          this._capturingKey=true;
+          const h=e=>{
+            e.preventDefault();
+            try{ e.stopPropagation(); }catch(_){}
+            // Normalize to event.code (ShiftLeft/ShiftRight, Space, Escape,
+            // Arrows, Enter, Tab, Backspace all preserved as codes).
+            const code=(SP_Input&&SP_Input.normCode)?SP_Input.normCode(e.code,e.key):(e.code||e.key);
+            if(!code){ window.removeEventListener('keydown',h,true); this._capturingKey=false; this.renderKeymap(); return; }
+            SP_Input.map[k]=code; SP_Save.data.settings.keys=Object.assign({},SP_Input.map); SP_Save.write(); this._capturingKey=false; this.renderKeymap(); window.removeEventListener('keydown',h,true);
+          };
           window.addEventListener('keydown',h,true);
         });
         row.appendChild(btn); km.appendChild(row);

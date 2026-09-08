@@ -2,23 +2,102 @@
 (function(global){
   'use strict';
   const DEFAULTS={left:'KeyA',right:'KeyD',jump:'Space',down:'KeyS',run:'ShiftLeft',action:'KeyE',pause:'Escape',altJump:'KeyW'};
+  /* Normalize a keyboard event to its engine code (event.code based).
+     Handles legacy names (Esc/Spacebar) and falls back to event.key when
+     event.code is missing. Display names are NEVER used as codes. */
+  function normCode(code,key){
+    if(!code||code===''){
+      if(!key) return '';
+      if(key===' '||key==='Spacebar') return 'Space';
+      if(key==='Esc') return 'Escape';
+      if(key==='Shift') return 'ShiftLeft';
+      if(key==='Left') return 'ArrowLeft';
+      if(key==='Right') return 'ArrowRight';
+      if(key==='Up') return 'ArrowUp';
+      if(key==='Down') return 'ArrowDown';
+      if(typeof key==='string'&&key.length===1){
+        const u=key.toUpperCase();
+        if(u>='A'&&u<='Z') return 'Key'+u;
+        if(u>='0'&&u<='9') return 'Digit'+u;
+        if(key===' ') return 'Space';
+      }
+      return key;
+    }
+    if(code==='Esc') return 'Escape';
+    if(code==='Spacebar') return 'Space';
+    return code;
+  }
+  function isShiftCode(c){ return c==='ShiftLeft'||c==='ShiftRight'||c==='Shift'; }
+  /* Human-readable display only — never used for gameplay matching. */
+  function prettyCode(c){
+    if(!c) return '';
+    if(c==='ShiftLeft'||c==='ShiftRight'||c==='Shift') return 'Shift';
+    if(c==='Space'||c==='Spacebar') return 'Space';
+    if(c==='Escape'||c==='Esc') return 'Escape';
+    if(c==='ArrowLeft') return '◀';
+    if(c==='ArrowRight') return '▶';
+    if(c==='ArrowUp') return '▲';
+    if(c==='ArrowDown') return '▼';
+    if(c==='Enter') return 'Enter';
+    if(c==='Tab') return 'Tab';
+    if(c==='Backspace') return 'Backspace';
+    if(c.indexOf('Key')===0&&c.length===4) return c.slice(3);
+    if(c.indexOf('Digit')===0&&c.length===6) return c.slice(5);
+    return c;
+  }
+  /* Convert a stored/display value back to a real event.code (for
+     forward-compat with old saves that may hold pretty names). */
+  function storedToCode(v){
+    if(!v||typeof v!=='string') return '';
+    const n=normCode(v,null);
+    if(n!==v) return n;
+    if(v==='Shift') return 'ShiftLeft';
+    if(v==='Esc') return 'Escape';
+    if(v==='Left'||v==='◀'||v==='←') return 'ArrowLeft';
+    if(v==='Right'||v==='▶'||v==='→') return 'ArrowRight';
+    if(v==='Up'||v==='▲'||v==='↑') return 'ArrowUp';
+    if(v==='Down'||v==='▼'||v==='↓') return 'ArrowDown';
+    if(v.length===1){
+      const u=v.toUpperCase();
+      if(u>='A'&&u<='Z') return 'Key'+u;
+      if(u>='0'&&u<='9') return 'Digit'+u;
+      if(v===' ') return 'Space';
+    }
+    return v;
+  }
   const Input={
     keys:{}, pressed:{}, map:Object.assign({},DEFAULTS),
     touch:{left:false,right:false,jump:false,action:false},
     joy:{x:0,jump:false,action:false,pause:false},
     enabled:true,
-    loadMap(custom){ if(custom) for(const k in DEFAULTS) if(custom[k]) this.map[k]=custom[k]; },
+    DEFAULTS:DEFAULTS, normCode:normCode, prettyCode:prettyCode, isShiftCode:isShiftCode, storedToCode:storedToCode,
+    loadMap(custom){ if(custom) for(const k in DEFAULTS) if(custom[k]&&typeof custom[k]==='string') this.map[k]=storedToCode(normCode(custom[k],null)); },
+    resetToDefaults(){ this.map=Object.assign({},DEFAULTS); },
     attach(canvas){
       window.addEventListener('keydown',e=>{
         if(e.repeat) return;
-        this.keys[e.code]=true; this.pressed[e.code]=true;
-        // only hijack scrolling keys during active gameplay; website keeps normal keyboard behavior
+        const code=normCode(e.code,e.key);
+        this.keys[code]=true; this.pressed[code]=true;
+        // only hijack keys during active gameplay; website keeps normal keyboard behavior.
+        // Prevent scrolling/focus loss for the CURRENTLY MAPPED actions plus the
+        // fixed movement alternates (arrows/space) and Tab/Enter/Backspace when mapped.
         const ui=global.SP_UI;
         const inGameplay=ui&&ui.view==='game'&&ui.inGame;
-        if(inGameplay&&['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
-        if(global.SP_UI&&global.SP_UI.onKeyDown) global.SP_UI.onKeyDown(e.code);
+        if(inGameplay){
+          let mapped=false;
+          try{
+            for(const k in this.map){ if(this.map[k]===code){ mapped=true; break; } }
+            if(isShiftCode(code)){
+              for(const k in this.map){ if(isShiftCode(this.map[k])){ mapped=true; break; } }
+            }
+          }catch(_){}
+          const fixed=(code==='Space'||code==='ArrowUp'||code==='ArrowDown'||code==='ArrowLeft'||code==='ArrowRight');
+          if(mapped||fixed) e.preventDefault();
+          else if((code==='Tab'||code==='Enter'||code==='Backspace')&&mapped) e.preventDefault();
+        }
+        if(global.SP_UI&&global.SP_UI.onKeyDown) global.SP_UI.onKeyDown(code);
       });
-      window.addEventListener('keyup',e=>{ this.keys[e.code]=false; });
+      window.addEventListener('keyup',e=>{ const code=normCode(e.code,e.key); this.keys[code]=false; });
       window.addEventListener('blur',()=>{ this.keys={}; this.touch={left:false,right:false,jump:false,action:false}; });
       // touch buttons
       document.querySelectorAll('#touch [data-t]').forEach(btn=>{
@@ -64,14 +143,18 @@
     },
     down(action){
       const c=this.map[action]||DEFAULTS[action];
-      if(this.keys[c]) return true;
+      // Single mapping source: the saved map. ShiftLeft/ShiftRight are the same
+      // physical control — either one satisfies a Shift mapping.
+      if(isShiftCode(c)){
+        if(this.keys['ShiftLeft']||this.keys['ShiftRight']||this.keys['Shift']) return true;
+      } else if(this.keys[c]) return true;
+      // Fixed movement alternates (not remappable, always available):
+      // arrows for directions + W as alt-jump. Run/Action/Pause have NO hidden
+      // alternates — they use ONLY the saved mapping (+ touch/gamepad below).
       if(action==='left'&&(this.keys['ArrowLeft'])) return true;
       if(action==='right'&&(this.keys['ArrowRight'])) return true;
       if(action==='jump'&&(this.keys['ArrowUp']||this.keys[this.map.altJump])) return true;
       if(action==='down'&&(this.keys['ArrowDown'])) return true;
-      if(action==='run'&&(this.keys['ShiftRight'])) return true;
-      if(action==='action'&&(this.keys['KeyJ'])) return true;
-      if(action==='pause'&&(this.keys['KeyP'])) return true;
       if(action==='left'&&(this.touch.left||this.joy.x<-0.3)) return true;
       if(action==='right'&&(this.touch.right||this.joy.x>0.3)) return true;
       if(action==='jump'&&(this.touch.jump||this.joy.jump)) return true;
@@ -81,13 +164,15 @@
     pressedOnce(action){
       const c=this.map[action]||DEFAULTS[action];
       const hit=code=>{ if(this.pressed[code]){this.pressed[code]=false;return true;} return false; };
-      if(hit(c)) return true;
+      if(isShiftCode(c)){
+        if(hit('ShiftLeft')||hit('ShiftRight')||hit('Shift')) return true;
+      } else if(hit(c)) return true;
       if(action==='jump'&&(hit('ArrowUp')||hit(this.map.altJump)||hit('touch:jump'))) return true;
       if(action==='left'&&(hit('ArrowLeft')||hit('touch:left'))) return true;
       if(action==='right'&&(hit('ArrowRight')||hit('touch:right'))) return true;
       if(action==='down'&&hit('ArrowDown')) return true;
-      if(action==='action'&&(hit('KeyJ')||hit('touch:action'))) return true;
-      if(action==='pause'&&(hit('Escape')||hit('KeyP')||hit('touch:pause'))) return true;
+      if(action==='action'&&hit('touch:action')) return true;
+      if(action==='pause'&&hit('touch:pause')) return true;
       return false;
     },
     consumeJumpBuffer(){

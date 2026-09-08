@@ -17,6 +17,301 @@
   const ENEMY_POOL=[['walker'],['walker','hopper'],['walker','flyer','hopper'],['runner','flyer','hopper'],['runner','spitter','patroller'],['flyer','spitter','brute','patroller'],['runner','spitter','brute','hopper','patroller']];
   function rng32(seed){ let a=seed>>>0; return function(){ a|=0;a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
   function pick(r,arr){ return arr[Math.floor(r()*arr.length)]; }
+  /* Coin layout sanitizer: repositions (never deletes) coins so formations look
+     designed — no overlaps, nothing inside solids/hazards/flags, all reachable.
+     Jump height ≈115px (745²/2·2400), collection radius 26px x / 34px y. */
+  const COIN_R=11, COIN_MIN_D=28;
+  function _coinHitsSolid(cx,cy,solids){
+    const x0=cx-COIN_R,y0=cy-COIN_R,x1=cx+COIN_R,y1=cy+COIN_R;
+    for(const s of solids){
+      if(x0<s.x+s.w&&x1>s.x&&y0<s.y+s.h&&y1>s.y) return s;
+    }
+    return null;
+  }
+  function _coinHitsHazard(cx,cy,hazards){
+    const x0=cx-COIN_R,y0=cy-COIN_R,x1=cx+COIN_R,y1=cy+COIN_R;
+    for(const h of hazards){
+      if(h.kind==='pit') continue;
+      if(x0<h.x+h.w&&x1>h.x&&y0<h.y+h.h&&y1>h.y) return h;
+    }
+    return null;
+  }
+  function _flagBoxFor(cp,solids){
+    let gy=470;
+    for(const s of solids){ if(s.type==='ground'&&cp.x>=s.x&&cp.x<=s.x+s.w){ gy=s.y; break; } }
+    return {x:cp.x-16,y:gy-120,w:68,h:120};
+  }
+  function _coinHitsFlag(cx,cy,checkpoints,solids){
+    const x0=cx-COIN_R,y0=cy-COIN_R,x1=cx+COIN_R,y1=cy+COIN_R;
+    for(const cp of checkpoints){
+      const f=_flagBoxFor(cp,solids);
+      if(x0<f.x+f.w&&x1>f.x&&y0<f.y+f.h&&y1>f.y) return f;
+    }
+    return null;
+  }
+  function sanitizeCoins(coins,solids,hazards,checkpoints,width,goal){
+    if(!coins.length) return;
+    const clampX=x=>Math.max(30,Math.min(width-30,x));
+    const clampY=y=>Math.max(60,Math.min(490,y));
+    function clearOfGeometry(x,y){
+      const x0=x-COIN_R,y0=y-COIN_R,x1=x+COIN_R,y1=y+COIN_R;
+      for(const s of solids){ if(x0<s.x+s.w&&x1>s.x&&y0<s.y+s.h&&y1>s.y) return false; }
+      return true;
+    }
+    function groundTopAt(px){
+      let best=null;
+      for(const s of solids){ if(s.type==='ground'&&px>=s.x&&px<=s.x+s.w&&(best===null||s.y<best)) best=s.y; }
+      return best;
+    }
+    // Fully free? bounds + solids + hazards + flags + coin spacing.
+    function isFree(x,y,selfIdx){
+      if(x<40||x>width-40||y<70||y>470) return false;
+      if(!clearOfGeometry(x,y)) return false;
+      if(_coinHitsHazard(x,y,hazards)) return false;
+      if(_coinHitsFlag(x,y,checkpoints,solids)) return false;
+      for(let k=0;k<coins.length;k++){
+        if(k===selfIdx) continue;
+        const o=coins[k];
+        if(o.x<40||o.x>width-40||o.y<70||o.y>470) continue;
+        const dx=o.x-x, dy=o.y-y;
+        if(dx*dx+dy*dy<COIN_MIN_D*COIN_MIN_D) return false;
+      }
+      return true;
+    }
+    // Nearest free spot within maxR (deterministic spiral, formation-preserving:
+    // tries small moves first, preferring axis-aligned nudges).
+    function findFreeNear(x,y,selfIdx,maxR){
+      if(isFree(x,y,selfIdx)) return {x,y};
+      const dirs=[[0,-1],[0,1],[-1,0],[1,0],[-1,-1],[1,-1],[-1,1],[1,1],[0,-1],[0,1]];
+      for(let r2=10;r2<=maxR;r2+=10){
+        for(const d of dirs){
+          const nx=x+d[0]*r2, ny=y+d[1]*r2;
+          if(isFree(nx,ny,selfIdx)) return {x:nx,y:ny};
+        }
+        // also try pure horizontal/vertical at half steps for tight lines
+        for(const xx of [x-r2,x+r2]){
+          if(isFree(xx,y,selfIdx)) return {x:xx,y};
+        }
+        for(const yy of [y-r2,y+r2]){
+          if(isFree(x,yy,selfIdx)) return {x,y:yy};
+        }
+      }
+      return null;
+    }
+    // Bounds-aware minimal push out of a solid (avoids edge piling).
+    function pushOutOfSolid(c,s){
+      const x0=c.x-COIN_R,y0=c.y-COIN_R,x1=c.x+COIN_R,y1=c.y+COIN_R;
+      const cands=[
+        {dx:0,dy:(s.y-COIN_R-4)-c.y},
+        {dx:0,dy:(s.y+s.h+COIN_R+4)-c.y},
+        {dx:(s.x-COIN_R-4)-c.x,dy:0},
+        {dx:(s.x+s.w+COIN_R+4)-c.x,dy:0}
+      ];
+      let best=null,bestD=Infinity;
+      for(const k of cands){
+        const nx=c.x+k.dx, ny=c.y+k.dy;
+        if(nx<30||nx>width-30||ny<60||ny>490) continue;
+        const d=Math.abs(k.dx)+Math.abs(k.dy);
+        if(d<bestD){ bestD=d; best=k; }
+      }
+      if(best){ c.x+=best.dx; c.y+=best.dy; }
+      else{ c.y=s.y-COIN_R-4; c.x=clampX(c.x); c.y=clampY(c.y); }
+    }
+    // 1) clear solids / hazards / checkpoint flags (minimal, bounds-aware)
+    // Out-of-bounds shards (generation can overflow past `width` on long
+    // levels) are NOT clamped to the edge pixel (that manufactures exact
+    // duplicates) — they are relocated below to free reachable spots.
+    const oob=[];
+    for(let idx=0;idx<coins.length;idx++){
+      const c=coins[idx];
+      if(c.x<40||c.x>width-40||c.y<70||c.y>470) oob.push(idx);
+      else{ c.x=clampX(c.x); c.y=clampY(c.y); }
+    }
+    for(let idx=0;idx<coins.length;idx++){
+      const c=coins[idx];
+      if(c.x<40||c.x>width-40||c.y<70||c.y>470) continue; // relocated later
+      for(let k=0;k<4;k++){
+        const s=_coinHitsSolid(c.x,c.y,solids);
+        if(!s) break;
+        const spot=findFreeNear(c.x,c.y,idx,90);
+        if(spot){ c.x=spot.x; c.y=spot.y; break; }
+        else break;
+      }
+      for(let k=0;k<3;k++){
+        const h=_coinHitsHazard(c.x,c.y,hazards);
+        if(!h) break;
+        // prefer just above the hazard; fallback to nearby free search
+        const ny=h.y-COIN_R-4;
+        if(isFree(c.x,ny,idx)){ c.y=ny; }
+        else{
+          const spot=findFreeNear(c.x,c.y,idx,80);
+          if(spot){ c.x=spot.x; c.y=spot.y; break; }
+          else break;
+        }
+      }
+      for(let k=0;k<3;k++){
+        const f=_coinHitsFlag(c.x,c.y,checkpoints,solids);
+        if(!f) break;
+        const leftX=f.x-COIN_R-4, rightX=f.x+f.w+COIN_R+4;
+        if(isFree(leftX,c.y,idx)) c.x=leftX;
+        else if(isFree(rightX,c.y,idx)) c.x=rightX;
+        else{
+          const spot=findFreeNear(c.x,c.y,idx,80);
+          if(spot){ c.x=spot.x; c.y=spot.y; break; }
+          else break;
+        }
+      }
+    }
+    // Relocate out-of-bounds shards to free reachable spots (never edge-clamp).
+    // Scans ground lines left→right, trying walkable height first (-70) then
+    // jump height (-100), keeping 34px lanes so relocated shards form clean
+    // intentional lines instead of stacks.
+    function spotFree(x,y,selfIdx){
+      if(x<50||x>width-50||y<70||y>470) return false;
+      if(!clearOfGeometry(x,y)) return false;
+      if(_coinHitsHazard(x,y,hazards)) return false;
+      if(_coinHitsFlag(x,y,checkpoints,solids)) return false;
+      for(let k=0;k<coins.length;k++){
+        if(k===selfIdx) continue;
+        const o=coins[k];
+        if(o.x<40||o.x>width-40||o.y<70||o.y>470) continue; // other pending OOB, ignore
+        const dx=o.x-x, dy=o.y-y;
+        if(dx*dx+dy*dy<COIN_MIN_D*COIN_MIN_D) return false;
+      }
+      return true;
+    }
+    for(const idx of oob){
+      const c=coins[idx];
+      let done=false;
+      for(let x=100;x<=width-100&&!done;x+=34){
+        const gy=groundTopAt(x);
+        if(gy===null) continue;
+        const tries=[gy-70,gy-100,gy-90,gy-60];
+        for(const ty of tries){
+          if(spotFree(x,ty,idx)){ c.x=x; c.y=ty; done=true; break; }
+        }
+      }
+      if(!done){
+        // last resort: clamp inside (should be rare; spacing pass keeps it free)
+        c.x=clampX(Math.min(Math.max(c.x,50),width-50)); c.y=clampY(c.y);
+      }
+    }
+    // 2) coin-to-coin spacing: conservative sweep, moves ONLY the later coin.
+    // Prefers the formation-preserving push along the pair axis, but only into
+    // fully free space (solids/hazards/flags/spacing/bounds); otherwise searches
+    // nearby free so no new overlap is ever manufactured.
+    for(let i=0;i<coins.length;i++){
+      for(let j=i+1;j<coins.length;j++){
+        const a=coins[i], b=coins[j];
+        const dx=b.x-a.x, dy=b.y-a.y;
+        const d=Math.sqrt(dx*dx+dy*dy);
+        if(d>=COIN_MIN_D) continue;
+        if(d<0.001){
+          const spot=findFreeNear(b.x,b.y,j,80);
+          if(spot){ b.x=spot.x; b.y=spot.y; }
+          continue;
+        }
+        const need=COIN_MIN_D-d;
+        const nx=dx/d, ny=dy/d;
+        const tx=b.x+nx*need, ty=b.y+ny*need;
+        if(isFree(tx,ty,j)){ b.x=tx; b.y=ty; continue; }
+        const spot=findFreeNear(b.x,b.y,j,70);
+        if(spot){ b.x=spot.x; b.y=spot.y; }
+      }
+    }
+    for(const c of coins){ c.x=clampX(c.x); c.y=clampY(c.y); }
+    // re-clear geometry after spacing (free-searching, never manufactures)
+    for(let idx=0;idx<coins.length;idx++){
+      const c=coins[idx];
+      for(let k=0;k<3;k++){
+        const s=_coinHitsSolid(c.x,c.y,solids);
+        if(!s) break;
+        const spot=findFreeNear(c.x,c.y,idx,80);
+        if(spot){ c.x=spot.x; c.y=spot.y; break; }
+        else break;
+      }
+      const f=_coinHitsFlag(c.x,c.y,checkpoints,solids);
+      if(f){
+        const leftX=f.x-COIN_R-4, rightX=f.x+f.w+COIN_R+4;
+        if(isFree(leftX,c.y,idx)) c.x=leftX;
+        else if(isFree(rightX,c.y,idx)) c.x=rightX;
+        else{
+          const spot=findFreeNear(c.x,c.y,idx,70);
+          if(spot){ c.x=spot.x; c.y=spot.y; }
+        }
+      }
+      if(_coinHitsHazard(c.x,c.y,hazards)){
+        const spot=findFreeNear(c.x,c.y,idx,70);
+        if(spot){ c.x=spot.x; c.y=spot.y; }
+      }
+    }
+    // 3) reachability guard — every coin must sit within a normal jump
+    // (≈115px up, generous horizontal) of some standable solid. Gap-arc coins
+    // over pits are reachable via the jump across, so allow 160px side reach.
+    // Moves land on fully free spots so reachability never manufactures overlap.
+    for(let idx=0;idx<coins.length;idx++){
+      const c=coins[idx];
+      let best=null, bestDy=Infinity;
+      for(const s of solids){
+        if(s.type==='hidden') continue;
+        const dy=s.y-c.y;
+        if(dy<-20||dy>200) continue;
+        if(c.x>=s.x-100&&c.x<=s.x+s.w+100){
+          if(dy<bestDy){ bestDy=dy; best=s; }
+        }
+      }
+      if(!best){
+        let gy=null;
+        for(const s of solids){
+          if(s.type!=='ground') continue;
+          if(c.x>=s.x-160&&c.x<=s.x+s.w+160){ if(gy===null||s.y<gy) gy=s.y; }
+        }
+        if(gy!==null){
+          const ty=clampY(gy-80);
+          if(isFree(c.x,ty,idx)) c.y=ty;
+          else{
+            const spot=findFreeNear(c.x,ty,idx,70);
+            if(spot){ c.x=spot.x; c.y=spot.y; }
+          }
+        }
+      } else if(bestDy>150){
+        const ty=clampY(best.y-110);
+        if(isFree(c.x,ty,idx)) c.y=ty;
+        else{
+          const spot=findFreeNear(c.x,ty,idx,70);
+          if(spot){ c.x=spot.x; c.y=spot.y; }
+        }
+      }
+    }
+    // 4) final light pass for residuals after reachability (same conservative
+    // rule: move later coin only, into fully free space)
+    for(let i=0;i<coins.length;i++) for(let j=i+1;j<coins.length;j++){
+      const a=coins[i], b=coins[j];
+      const dx=b.x-a.x, dy=b.y-a.y, d=Math.sqrt(dx*dx+dy*dy);
+      if(d>=COIN_MIN_D||d<0.001) continue;
+      const need=COIN_MIN_D-d, nx=dx/d, ny=dy/d;
+      const tx=b.x+nx*need, ty=b.y+ny*need;
+      if(isFree(tx,ty,j)){ b.x=tx; b.y=ty; continue; }
+      const spot=findFreeNear(b.x,b.y,j,60);
+      if(spot){ b.x=spot.x; b.y=spot.y; }
+    }
+    for(const c of coins){ c.x=clampX(c.x); c.y=clampY(c.y); }
+    // keep clear of geometry after final nudges (free-searching)
+    for(let idx=0;idx<coins.length;idx++){
+      const c=coins[idx];
+      for(let k=0;k<3;k++){
+        const s=_coinHitsSolid(c.x,c.y,solids);
+        if(!s) break;
+        const spot=findFreeNear(c.x,c.y,idx,80);
+        if(spot){ c.x=spot.x; c.y=spot.y; break; }
+        else break;
+      }
+      if(_coinHitsHazard(c.x,c.y,hazards)||_coinHitsFlag(c.x,c.y,checkpoints,solids)){
+        const spot=findFreeNear(c.x,c.y,idx,70);
+        if(spot){ c.x=spot.x; c.y=spot.y; }
+      }
+    }
+  }
 
   function buildLevel(num){
     const world=Math.min(9,Math.floor((num-1)/5));
@@ -48,12 +343,19 @@
       const segW=170+r()*130;
       const gap=last?0:(r()<0.75?Math.min(165,gapBase*(0.6+r()*0.9)):0);
       if(gap>4){
-        // hazard pit or coins arc over gap
+        // hazard pit or coins arc over gap — clean spacing without deleting:
+        // keep the designed 3-5 shard arc, widen onto the lips so even tiny
+        // gaps achieve 30px center spacing; smooth sin arc preserved.
         const gx=x, gw=gap;
         const hk=W.hazard;
         if(r()<0.6) hazards.push({x:gx+8,y:GROUND_Y+44,w:gw-16,h:30,kind:(hk==='lava'||hk==='poison')?hk:'pit'});
         const nArc=3+Math.floor(r()*3);
-        for(let i=0;i<nArc;i++) coins.push({x:gx+10+i*(gw-20)/Math.max(1,nArc-1),y:GROUND_Y-58-Math.sin(i/(nArc-1)*Math.PI)*38,taken:false});
+        const spanW=Math.max(gw+40,(nArc-1)*30);
+        const x0=gx-(spanW-gw)/2;
+        for(let i=0;i<nArc;i++){
+          const t=nArc===1?0.5:i/(nArc-1);
+          coins.push({x:x0+t*spanW,y:GROUND_Y-58-Math.sin(t*Math.PI)*38,taken:false});
+        }
         x+=gap;
       }
       const gw2=last?560:segW;
@@ -101,8 +403,9 @@
         if(!secretPlaced&&r()<0.10&&type==='hidden'){ // secret cache above hidden block
           secretPlaced=true; s2._secret=true; // secret carriers never move
           // standing on the revealed block (jump ≈115px),
-          // both the coins and the gift stay comfortably in reach
-          for(let k=0;k<5;k++) coins.push({x:px-40+k*26,y:py-80,taken:false,secret:true});
+          // both the coins and the gift stay comfortably in reach.
+          // 30px spacing = clean line, no visual overlap (coin Ø22).
+          for(let k=0;k<5;k++) coins.push({x:px+w/2-60+k*30,y:py-80,taken:false,secret:true});
           powerups.push({x:px+w/2,y:py-95,kind:pick(r,['shield','heart','star']),secret:true,taken:false});
         }
       }
@@ -117,9 +420,30 @@
       if(num>4&&r()<0.25+diff*0.4){
         hazards.push({x:x+30+r()*(gw2-80),y:gyC-24,w:34,h:24,kind:W.hazard});
       }
-      // coin lines / arcs on ground
-      if(r()<0.7){ const n=3+Math.floor(r()*4); const bx=x+20+r()*Math.max(10,gw2-120);
-        for(let i=0;i<n;i++) coins.push({x:bx+i*30,y:gyC-50-Math.abs(i-(n-1)/2)*6,taken:false}); }
+      // coin lines / arcs on ground — candidates avoid platform bodies so shards
+      // never spawn inside geometry; final sanitize pass enforces spacing.
+      // NOTE: candidate offsets are deterministic (no extra rng) so the level
+      // seed sequence — and therefore coin counts/difficulty — never shifts.
+      if(r()<0.7){
+        const n=3+Math.floor(r()*4);
+        const bx0=x+20+r()*Math.max(10,gw2-120);
+        const maxShift=Math.max(0,gw2-30*(n-1)-40);
+        let bx=bx0;
+        for(let attempt=0;attempt<8;attempt++){
+          const tx=(attempt===0)?bx0:(x+20+((attempt*67+n*13)%Math.max(10,maxShift+10)));
+          let clean=true;
+          for(let i=0;i<n&&clean;i++){
+            const cx=tx+i*30, cy=gyC-50-Math.abs(i-(n-1)/2)*6;
+            const box={x:cx-13,y:cy-13,w:26,h:26};
+            for(const o of placedPlats){
+              if(box.x<o.x+o.w&&box.x+box.w>o.x&&box.y<o.y+o.h&&box.y+box.h>o.y){ clean=false; break; }
+            }
+          }
+          if(clean){ bx=tx; break; }
+          if(attempt===7) bx=tx; // last candidate even if imperfect (sanitizer fixes)
+        }
+        for(let i=0;i<n;i++) coins.push({x:bx+i*30,y:gyC-50-Math.abs(i-(n-1)/2)*6,taken:false});
+      }
       // relic: hide in one segment — always within a normal jump of the ground
       if(!relic&&((s===Math.floor(nSeg/2)&&r()<0.6)||s===nSeg-2)){
         relic={x:x+gw2/2,y:gyC-88-r()*14,taken:false};
@@ -215,6 +539,9 @@
       solids.push({x:ax,y:GROUND_Y,w:760,h:200,type:'ground'});
       boss={name:BOSS_NAMES[num]||('Boss '+num),hp:3+Math.floor(num/6)+(num===50?6:0),maxhp:3+Math.floor(num/6)+(num===50?6:0),x:width-380,y:GROUND_Y-90,phase:1,t:0};
     }
+    // Clean coin layout: reposition only (never delete) so shards look designed —
+    // no coin-to-coin overlaps, nothing inside solids/hazards/flags, all reachable.
+    try{ sanitizeCoins(coins,solids,hazards,checkpoints,width,goal); }catch(e){}
     return {
       num,world,worldName:W.name,theme:W,tip:W.tip,width,height:540,
       spawn:{x:60,y:GROUND_Y-80},solids,coins,enemies,powerups,checkpoints,hazards,goal,relic,
