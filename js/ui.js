@@ -18,6 +18,15 @@
       // zero touch points until the first tap. Respect an explicit user opt-out.
       window.addEventListener('touchstart',()=>{ if(!this._hadTouch){ this._hadTouch=true; this.fitTouch(); this._syncTouchChecks(); } },{passive:true});
       this.fitTouch();
+      this.fitControlsCard();
+      // Re-evaluate if the device environment changes (mouse plugged in/out,
+      // devtools emulation toggled, hybrid docked/undocked, etc.).
+      try{
+        ['(pointer:fine)','(hover:hover)'].forEach(q=>{
+          const m=window.matchMedia&&window.matchMedia(q);
+          if(m&&m.addEventListener) m.addEventListener('change',()=>this.fitControlsCard());
+        });
+      }catch(e){}
       $('#qMusic').addEventListener('input',e=>{ SP_Save.data.settings.music=+e.target.value; SP_Save.write(); SP_Audio.setVolumes(SP_Save.data.settings); });
       $('#qSfx').addEventListener('input',e=>{ SP_Save.data.settings.sfx=+e.target.value; SP_Save.write(); SP_Audio.setVolumes(SP_Save.data.settings); });
       $('#qTouch').addEventListener('change',e=>{ const v=e.target.checked, s=SP_Save.data.settings; s.touch=v; s.touchOff=!v; SP_Save.write(); this._syncTouchChecks(); this.fitTouch(); });
@@ -233,6 +242,20 @@
       const a=$('#qTouch'), b=$('#setTouch');
       if(a) a.checked=v;
       if(b) b.checked=v;
+    },
+    /* Desktop-only Controls card: key remapping needs a physical keyboard, so
+       the section shows only where a precise pointer exists (fine pointer OR
+       hover-capable). Touch-only phones/tablets hide it; hybrid laptops
+       (fine + hover + touch) stay visible since the keyboard is present.
+       Toggling .hidden (display:none) leaves no gap. */
+    fitControlsCard(){
+      const card=document.getElementById('controlsCard'); if(!card) return;
+      let fine=false, hover=false, touch=false;
+      try{ fine=!!(window.matchMedia&&window.matchMedia('(pointer:fine)').matches); }catch(e){}
+      try{ hover=!!(window.matchMedia&&window.matchMedia('(hover:hover)').matches); }catch(e){}
+      try{ touch=!!((navigator&&(navigator.maxTouchPoints>0||navigator.msMaxTouchPoints>0))||('ontouchstart' in window)); }catch(e){}
+      const show=(fine||hover)&&!(touch&&!fine&&!hover);
+      card.classList.toggle('hidden',!show);
     },
     fitTouch(){
       const s=SP_Save.data.settings;
