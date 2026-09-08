@@ -178,11 +178,39 @@
       if(s) s.classList.toggle('hidden',!open);
       if(open) this.updateShopBalances(true);
     },
-    toast(msg){
-      const t=$('#toast'); if(!t) return;
-      t.textContent=msg; t.classList.add('show');
-      clearTimeout(this._toastT); this._toastT=setTimeout(()=>t.classList.remove('show'),2600);
+    /* In-game notification center (replaces browser alert()): non-blocking,
+       queued (max 3, oldest dropped), auto-dismissing. Renders into BOTH the
+       page toast and the in-canvas toast so messages stay visible in game
+       fullscreen (page-level fixed elements are hidden under fullscreen). */
+    notify(msg,type){
+      this._toastQ=this._toastQ||[];
+      this._toastQ.push({msg:String(msg),type:type||'info'});
+      while(this._toastQ.length>3) this._toastQ.shift();
+      if(!this._toastBusy) this._nextToast();
     },
+    _nextToast(){
+      const nx=(this._toastQ||[]).shift();
+      if(!nx){ this._toastBusy=false; return; }
+      this._toastBusy=true;
+      const icons={success:'★',info:'✦',warning:'⚠',error:'✖'};
+      const text=(icons[nx.type]||icons.info)+'  '+nx.msg;
+      const cls='t-'+(icons[nx.type]?nx.type:'info');
+      const els=[$('#toast'),$('#gameToast')].filter(Boolean);
+      if(!els.length){ this._toastBusy=false; return; }
+      els.forEach(el=>{
+        el.textContent=text; // textContent: never interpret message HTML
+        el.classList.remove('show','t-success','t-info','t-warning','t-error');
+        void el.offsetWidth; // restart the slide/fade transition
+        el.classList.add('show',cls);
+      });
+      clearTimeout(this._toastT);
+      this._toastT=setTimeout(()=>{
+        els.forEach(el=>el.classList.remove('show'));
+        clearTimeout(this._toastT);
+        this._toastT=setTimeout(()=>this._nextToast(),280);
+      },2600);
+    },
+    toast(msg){ this.notify(msg,'info'); }, // back-compat alias for older callers
     /* Touch capable? coarse pointer OR multi-touch points OR legacy touch event
        OR an observed first touch (hybrid laptops). Desktop keyboard/mouse: false. */
     isTouchDevice(){
@@ -237,7 +265,7 @@
     /* ----- game flow ----- */
     startLevel(n,keepScore){
       n=Math.max(1,Math.min(50,n));
-      if(!SP_Save.isUnlocked(n)){ alert('Level '+n+' is locked. Clear Level '+(n-1)+' first!'); return; }
+      if(!SP_Save.isUnlocked(n)){ this.notify('Level '+n+' is locked. Clear Level '+(n-1)+' first!','warning'); return; }
       this.currentLevel=n; this.inGame=true; this.paused=false; this.suspended=false; this.completeRes=null;
       this.show('game'); this.hideOverlays();
       if(!keepScore) this.carryScore=0;
@@ -538,7 +566,7 @@
       $('#setTouch').addEventListener('change',e=>{ const v=e.target.checked, st=s(); st.touch=v; st.touchOff=!v; SP_Save.write(); this._syncTouchChecks(); this.fitTouch(); });
       $('#btnFullscreen').addEventListener('click',()=>this.fullscreen());
       $('#btnReplayIntro').addEventListener('click',()=>{ SP_Intro.replay(); });
-      $('#btnResetSave').addEventListener('click',()=>{ if(confirm('Reset ALL progress and settings?')){ SP_Save.reset(); SP_Save.write(); this.carryScore=0; this.applySettingsToDom(); this.renderLevelSelect(); this.refreshHero(); this.renderReviews(); alert('Progress wiped. Fresh adventure awaits!'); } });
+      $('#btnResetSave').addEventListener('click',()=>{ if(confirm('Reset ALL progress and settings?')){ SP_Save.reset(); SP_Save.write(); this.carryScore=0; this.applySettingsToDom(); this.renderLevelSelect(); this.refreshHero(); this.renderReviews(); this.notify('Progress wiped. Fresh adventure awaits!','success'); } });
       $('#btnResetKeys').addEventListener('click',()=>{ s().keys=null; SP_Input.map=Object.assign({},SP_Input.map={left:'KeyA',right:'KeyD',jump:'Space',down:'KeyS',run:'ShiftLeft',action:'KeyE',pause:'Escape',altJump:'KeyW'}); SP_Save.write(); this.renderKeymap(); });
     },
     renderKeymap(){

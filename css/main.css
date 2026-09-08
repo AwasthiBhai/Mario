@@ -1895,12 +1895,16 @@ body.show-touch .touch {
   color: var(--gold-text)
 }
 
-/* toast */
+/* toast: non-blocking in-game notifications (replaces alert()).
+   Page toast is viewport-fixed; the in-canvas twin lives inside #canvasWrap
+   so messages stay visible in game fullscreen. Both are pointer-transparent,
+   wrap long text, and never scroll the page. Type classes only tint the
+   gold accent; themes flow through the shared variables. */
 .toast {
   position: fixed;
   left: 50%;
-  bottom: 26px;
-  transform: translateX(-50%) translateY(20px);
+  top: calc(72px + var(--sat));
+  transform: translateX(-50%) translateY(-14px);
   background: #0a0e22;
   border: 1px solid var(--gold);
   color: var(--cream);
@@ -1909,16 +1913,44 @@ body.show-touch .touch {
   font-weight: 700;
   opacity: 0;
   pointer-events: none;
-  transition: all .3s;
+  transition: opacity .3s ease, transform .3s ease;
   z-index: 300;
   box-shadow: var(--shadow);
-  max-width: 92vw;
-  text-align: center
+  max-width: min(92vw, 560px);
+  text-align: center;
+  overflow-wrap: anywhere
 }
 
 .toast.show {
   opacity: 1;
   transform: translateX(-50%) translateY(0)
+}
+
+.toast.t-success {
+  border-color: var(--gold);
+  box-shadow: 0 0 18px rgba(255, 201, 77, .30), var(--shadow)
+}
+
+.toast.t-info {
+  border-color: var(--gold)
+}
+
+.toast.t-warning {
+  border-color: #FFB35C;
+  box-shadow: 0 0 18px rgba(255, 179, 92, .25), var(--shadow)
+}
+
+.toast.t-error {
+  border-color: #FF6B6B;
+  box-shadow: 0 0 18px rgba(255, 107, 107, .25), var(--shadow)
+}
+
+/* in-canvas twin: anchored to the game wrapper (visible in fullscreen) */
+.toast-game {
+  position: absolute;
+  top: 54px;
+  z-index: 6;
+  max-width: calc(100% - 24px)
 }
 
 /* reviews */
@@ -2067,7 +2099,13 @@ body.show-touch .touch {
   }
 
   .toast {
-    bottom: calc(86px + var(--sab))
+    top: calc(64px + var(--sat));
+    padding: 10px 18px;
+    font-size: .9rem
+  }
+
+  .toast-game {
+    top: 46px
   }
 }
 
