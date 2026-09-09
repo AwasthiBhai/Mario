@@ -30,10 +30,12 @@
     lives:3,cb:{},parts:[],shots:[],eshots:[],floaters:[],weather:[],tGlobal:0,
     checkpoint:null,relicGot:false,secretCount:0,completed:false,dead:false,
     settings:{shake:true,reducedMotion:false},
+    charImg:null,charReady:false, // custom Character.png sprite (visual only; hitbox untouched)
     init(canvas,cb){ this.canvas=canvas; this.ctx=canvas.getContext('2d'); this.cb=cb||{};
       if(this._inited) return; this._inited=true; // single game loop, never duplicated
       this.last=performance.now();
       this.fitCanvas();
+      this.loadCharacter(); // preload player sprite (relative path: Pages-subpath safe)
       // recalc viewport on rotation, browser-chrome show/hide, fullscreen, window resize
       let rT=null;
       const refit=()=>{ clearTimeout(rT); rT=setTimeout(()=>this.fitCanvas(),80); };
@@ -57,6 +59,18 @@
       const bw=Math.min(1920,Math.max(320,Math.round(cssW*dpr)));
       const bh=Math.min(1080,Math.max(180,Math.round(cssH*dpr)));
       if(cv.width!==bw||cv.height!==bh){ cv.width=bw; cv.height=bh; }
+    },
+    /* Custom player sprite: loads ./Character.png ONCE (local file,
+       versioned ?v=13 for cache-busting). Visual only — never physics. */
+    loadCharacter(){
+      try{
+        if(this.charImg||typeof Image==='undefined') return;
+        const self=this, im=new Image();
+        im.onload=function(){ self.charReady=true; };
+        im.onerror=function(){ self.charReady=false; };
+        im.src='./Character.png?v=13';
+        this.charImg=im;
+      }catch(e){}
     },
     start(){ this.running=true; this.paused=false; },
     stop(){ this.running=false; },
@@ -724,33 +738,12 @@
       c.fillStyle='rgba(0,0,0,0.32)'; c.beginPath(); c.ellipse(cx,feet+4,p.w/2,5,0,0,7); c.fill();
       const squash=p.state==='jump'?0.92:(p.state==='fall'?1.06:1+Math.sin(p.anim*10)*0.02);
       c.translate(cx,feet); c.scale(p.face,1); c.scale(1,squash); c.translate(-cx,-feet);
-      // tail
-      const wag=Math.sin(p.anim*8)*6;
-      c.fillStyle='#FF8A3D'; c.beginPath(); c.ellipse(p.x-6,p.y+26,12,9,wag*0.05,0,7); c.fill();
-      c.fillStyle='#FFE9A8'; c.beginPath(); c.ellipse(p.x-9,p.y+26,5,4,0,0,7); c.fill();
-      // body
-      const bg=c.createLinearGradient(0,p.y,0,p.y+p.h); bg.addColorStop(0,'#FFB066'); bg.addColorStop(1,'#FF7A4D');
-      c.fillStyle=bg; this.rr(c,p.x,p.y,p.w,p.h,12); c.fill();
-      c.lineWidth=2.5; c.strokeStyle='#5b2500'; c.stroke();
-      // ears
-      const earB=p.state==='jump'?-4:Math.sin(p.anim*6)*1.5;
-      c.fillStyle='#FF7A4D'; c.strokeStyle='#5b2500';
-      c.beginPath(); c.moveTo(p.x+4,p.y+6+earB); c.lineTo(p.x+9,p.y-12+earB); c.lineTo(p.x+17,p.y+5+earB); c.closePath(); c.fill(); c.stroke();
-      // face
-      c.fillStyle='#FFF3D6'; this.rr(c,p.x+6,p.y+14,p.w-6,22,10); c.fill();
-      c.fillStyle='#1a1030';
-      const lookY=p.state==='fall'?3:(p.state==='jump'?-2:0);
-      c.beginPath(); c.arc(p.x+20,p.y+23+lookY,3.6,0,7); c.fill();
-      c.fillStyle='#5b2500'; c.beginPath(); c.ellipse(p.x+p.w-3,p.y+28,3,2.4,0,0,7); c.fill();
-      // feet
-      const runPh=Math.sin(p.anim*(p.state==='run'?18:10))*4;
-      c.fillStyle='#5b2500';
-      if(p.state==='run'||p.state==='walk'){ c.fillRect(p.x+3,feet-5+runPh*0.4,9,6); c.fillRect(p.x+16,feet-5-runPh*0.4,9,6); }
-      else { c.fillRect(p.x+3,feet-5,9,6); c.fillRect(p.x+16,feet-5,9,6); }
-      // lantern
-      c.save(); c.shadowColor='#FFC94D'; c.shadowBlur=16;
-      c.fillStyle='#FFF3B0'; this.rr(c,p.x-12,p.y+16,9,14,4); c.fill(); c.restore();
-      c.strokeStyle='#5b2500'; c.lineWidth=2; this.rr(c,p.x-12,p.y+16,9,14,4); c.stroke();
+      // Custom character sprite (Character.png, 500x500): aspect-preserved,
+      // height fitted to the hitbox (p.h), centered on cx, feet-anchored.
+      // Hitbox (p.x/p.y/p.w/p.h), physics and mirroring logic are unchanged.
+      if(this.charImg&&this.charReady){
+        try{ c.drawImage(this.charImg,cx-p.h/2,p.y,p.h,p.h); }catch(e){}
+      }
       // shield / powers aura
       if(p.shield){ c.strokeStyle='#5DF2C8'; c.lineWidth=3; c.globalAlpha=0.8; c.beginPath(); c.arc(cx,p.y+p.h/2,30+Math.sin(this.tGlobal*5)*3,0,7); c.stroke(); c.globalAlpha=blink?0.45:1; }
       if(p.starT>0){ c.fillStyle='#FFC94D'; c.font='bold 12px sans-serif'; c.fillText('✦',p.x-14,p.y-6); }
