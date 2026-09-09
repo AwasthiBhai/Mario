@@ -63,6 +63,11 @@
   var SESSION_KEY = 'starboundProfileSessionV1';
   var CACHE_KEY = 'starboundProfilesCacheV1';
   var OUTBOX_KEY = 'starboundProfileOutboxV1';
+  /* One-time global gameplay reset marker (see Save.migrateResetOnce for the
+     local twin). The server wipe sets doc.resetVersion=1; every write path
+     preserves it so the marker survives read-modify-write cycles. Gameplay
+     recorded after the reset is never touched again. */
+  var RESET_VERSION = 1;
 
   function cfg(){ return global.SP_ProfilesConfig || {}; }
 
@@ -238,7 +243,7 @@
   }
 
   function sanitizeDoc(doc){
-    if(!doc || typeof doc !== 'object') return { v: 1, users: [] };
+    if(!doc || typeof doc !== 'object') return { v: 1, resetVersion: 0, users: [] };
     var arr = Array.isArray(doc.users) ? doc.users : [];
     var seen = {}, out = [];
     for(var i = 0; i < arr.length && out.length < MAX_USERS; i++){
@@ -247,7 +252,9 @@
       seen[u.id] = true;
       out.push(u);
     }
-    return { v: 1, users: out };
+    var rv = Math.floor(Number(doc.resetVersion));
+    if(!isFinite(rv) || rv < 0 || rv > 99) rv = 0;
+    return { v: 1, resetVersion: rv, users: out };
   }
 
   /* PUBLIC shape: the ONLY representation of another player the product
@@ -483,6 +490,7 @@
   /* ================= public API ================= */
   var Profiles = {
     MAX_NAME: MAX_NAME, MAX_PID: MAX_PID, MIN_PID: MIN_PID, MAX_USERS: MAX_USERS,
+    RESET_VERSION: RESET_VERSION,
 
     validateName: validateName,
     validatePrivateId: validatePrivateId,
