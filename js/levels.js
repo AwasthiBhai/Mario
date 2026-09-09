@@ -321,11 +321,21 @@
     const r=rng32(num*7919+world*131+7);
     const isBoss=(idx===4);
     const GROUND_Y=470;
-    const width=isBoss?3400:2400+Math.floor(num*55+r()*300);
+    // Levels run ~1.7x longer than the original layout: the extra width feeds
+    // the same segment generator below, so new sections (platforms, gaps,
+    // coins, enemies, hazards, checkpoints) are produced by the identical
+    // safety-capped rules — never by stretching. All downstream placement
+    // (segments, checkpoints, goal, powerups, sanitizer bounds) is
+    // width-relative, and the rng seed is unchanged, so generation stays
+    // deterministic per level number.
+    const baseW=isBoss?3400:2400+Math.floor(num*55+r()*300);
+    const width=Math.floor(baseW*1.7);
     const solids=[],coins=[],enemies=[],powerups=[],checkpoints=[],hazards=[];
     // checkpoint columns first: plates placed below must keep these clear so
-    // no platform ever crosses a checkpoint flag (pole at x, pennant to x+44)
-    const nCp=2+Math.floor(diff*2);
+    // no platform ever crosses a checkpoint flag (pole at x, pennant to x+44).
+    // One extra flag on non-boss levels keeps checkpoint density about the
+    // same across the longer stages.
+    const nCp=(isBoss?2:3)+Math.floor(diff*2);
     const cpRawXs=[];
     for(let i=1;i<=nCp;i++) cpRawXs.push((width-700)*i/(nCp+1)+200);
     const placedPlats=[]; // non-ground solids, for overlap checks
@@ -469,17 +479,37 @@
     function snapCheckpoint(x0){
       const lo=isBoss?60:40, hi=isBoss?width-760:width-320;
       const okX=x=>x>=lo&&x<=hi;
+      // Footing: solid ground under the flag AND 40px of same-level ground on
+      // both sides (player body is 28px wide) — flags never balance on a pit
+      // lip, even when a single pixel of ground exists beneath the exact x.
+      function footing(x){
+        let gl=null, gc=null, gr=null;
+        for(const s of solids){
+          if(s.type!=='ground') continue;
+          if(x-40>=s.x&&x-40<=s.x+s.w&&(gl===null||s.y<gl)) gl=s.y;
+          if(x>=s.x&&x<=s.x+s.w&&(gc===null||s.y<gc)) gc=s.y;
+          if(x+40>=s.x&&x+40<=s.x+s.w&&(gr===null||s.y<gr)) gr=s.y;
+        }
+        if(gl===null||gc===null||gr===null) return null;
+        if(Math.abs(gl-gc)>24||Math.abs(gr-gc)>24) return null;
+        return gc;
+      }
+      function pitNear(x){
+        for(const h of hazards){ if(h.kind!=='pit') continue; if(x+40>h.x&&x-40<h.x+h.w) return true; }
+        return false;
+      }
       const good=x=>{
         if(!okX(x)) return false;
-        const gy=stanceTop(x); if(gy===null) return false;
+        const gy=footing(x); if(gy===null) return false;
+        if(pitNear(x)) return false;
         if(boxHitsHazard(x-14,gy-42,28,42)) return false;
         if(plateCrossesFlag(x,gy)) return false;
         return true;
       };
       if(good(x0)) return x0;
       for(let d=20;d<=260;d+=20){ if(good(x0-d)) return x0-d; if(good(x0+d)) return x0+d; }
-      // fallback: supported + hazard-clear even if a plate is near, else clamp
-      const sup=x=>{ if(!okX(x)) return false; const gy=stanceTop(x); return gy!==null&&!boxHitsHazard(x-14,gy-42,28,42); };
+      // fallback: footed + hazard-clear even if a plate is near, else clamp
+      const sup=x=>{ if(!okX(x)) return false; const gy=footing(x); return gy!==null&&!pitNear(x)&&!boxHitsHazard(x-14,gy-42,28,42); };
       if(sup(x0)) return x0;
       for(let d=20;d<=400;d+=20){ if(sup(x0-d)) return x0-d; if(sup(x0+d)) return x0+d; }
       return Math.max(lo,Math.min(hi,x0));

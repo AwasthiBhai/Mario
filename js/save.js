@@ -12,6 +12,27 @@
   const RESET_VERSION=1;
   const OUTBOX_KEY='starboundProfileOutboxV1';
   const PROFILES_CACHE_KEY='starboundProfilesCacheV1';
+  /* Account gate: unregistered players get TEMPORARY session-only gameplay —
+     progress works during the visit but is never restored on the next one.
+     Fail-safe direction is PRESERVE: if the profile module is unavailable we
+     cannot prove "no account", so stored progress is kept rather than risk
+     wiping a registered player's data. */
+  function hasAccount(){
+    try{
+      const P=global.SP_Profiles;
+      if(P&&typeof P.hasAccount==='function') return !!P.hasAccount();
+    }catch(e){}
+    return true;
+  }
+  /* Zeroes ONLY gameplay progression (unlocks, per-level bests, coins,
+     relics, totals). Settings, introSeen, version and the reset marker are
+     left alone; theme/session live under their own keys and are untouched. */
+  function clearGameplay(d){
+    d.maxUnlocked=1;
+    d.levels={};
+    d.totalCoins=0; d.totalRelics=0; d.totalScore=0;
+    return d;
+  }
   const defaults=()=>({
     version:1, introSeen:false, maxUnlocked:1,
     levels:{}, // "3": {done, bestScore, bestTime, coins, totalCoins, relic}
@@ -45,6 +66,9 @@
         this.data=sanitize(JSON.parse(raw));
       }catch(e){ this.data=defaults(); }
       this.migrateResetOnce();
+      // Unregistered = temporary session only: never restore stored gameplay
+      // from a previous visit (settings/introSeen/marker still apply).
+      if(!hasAccount()) clearGameplay(this.data);
       return this.data;
     },
     /* One-time migration: pre-reset saves (no marker) lose ONLY gameplay
@@ -65,7 +89,18 @@
         return true;
       }catch(e){ return false; }
     },
-    write(){ try{ localStorage.setItem(KEY,JSON.stringify(this.data)); }catch(e){} },
+    write(){
+      try{
+        // Unregistered = temporary session only: persist preferences/marker
+        // but never gameplay progress (in-memory session play is unaffected).
+        let payload=this.data;
+        if(!hasAccount()){
+          payload=Object.assign({},this.data);
+          clearGameplay(payload);
+        }
+        localStorage.setItem(KEY,JSON.stringify(payload));
+      }catch(e){}
+    },
     reset(){ this.data=defaults(); this.write(); },
     isUnlocked(n){ return n<=this.data.maxUnlocked; },
     recordLevel(n,result){
