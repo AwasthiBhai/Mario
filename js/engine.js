@@ -68,7 +68,7 @@
         const self=this, im=new Image();
         im.onload=function(){ self.charReady=true; };
         im.onerror=function(){ self.charReady=false; };
-        im.src='./Character.png?v=13';
+        im.src='./Character.png?v=14';
         this.charImg=im;
       }catch(e){}
     },
@@ -88,7 +88,8 @@
       this.lives=3; this.completed=false; this.dead=false; this.relicGot=false; this.secretCount=0;
       this.parts=[]; this.shots=[]; this.eshots=[]; this.floaters=[];
       this.player={x:L.spawn.x,y:L.spawn.y,w:28,h:42,vx:0,vy:0,face:1,onGround:false,coyote:0,jbuf:0,
-        hp:3,maxhp:3,iframes:0,state:'idle',anim:0,crouch:false,shield:false,speedT:0,jumpT:0,starT:0,magnetT:0,invT:0,shootCd:0,dead:0,win:0,landed:0};
+        hp:3,maxhp:3,iframes:0,state:'idle',anim:0,crouch:false,shield:false,speedT:0,jumpT:0,starT:0,magnetT:0,invT:0,shootCd:0,dead:0,win:0,landed:0,
+        landT:0,hurtT:0,idleT:0,vA:null}; // visual-only animation timers (never gameplay)
       this.checkpoint=this.sanitizeCheckpoint({x:L.spawn.x,y:L.spawn.y});
       this.cam.x=0; this.cam.y=0;
       this._run=(this._run||0)+1;
@@ -106,7 +107,7 @@
       if(!isFinite(fromX)) fromX=p.x+p.w/2; // defensive: never inherit NaN knockback
       if(p.invT>0){ this.burst(p.x+p.w/2,p.y+p.h/2,'#FFC94D',6); return; } // invincible: no damage, no knockback
       if(p.shield){ p.shield=false; p.iframes=1.5; sfx('hurt'); this.burst(p.x,p.y,'#5DF2C8',14); this.floater(p.x,p.y-20,'SHIELD!', '#5DF2C8'); return; }
-      p.hp--; p.iframes=1.5; sfx('hurt'); this.cam.shake=8;
+      p.hp--; p.iframes=1.5; p.hurtT=0.3; sfx('hurt'); this.cam.shake=8; // hurtT: visual flinch only
       this.burst(p.x+p.w/2,p.y+p.h/2,'#FF6B6B',16);
       p.vy=-420; p.vx=(p.x+p.w/2<fromX?-1:1)*220;
       if(p.hp<=0) this.killPlayer();
@@ -286,6 +287,7 @@
       if(p.dead>0){ p.dead-=dt; p.vy+=GRAV*dt; p.y+=p.vy*dt; return; }
       if(p.win>0){ p.win-=dt; p.vx*=0.9; p.vy+=GRAV*dt; p.y+=p.vy*dt; return; }
       p.anim+=dt; p.iframes=Math.max(0,p.iframes-dt);
+      p.landT=Math.max(0,(p.landT||0)-dt); p.hurtT=Math.max(0,(p.hurtT||0)-dt); // visual timers only
       p.speedT=Math.max(0,p.speedT-dt); p.jumpT=Math.max(0,p.jumpT-dt); p.starT=Math.max(0,p.starT-dt); p.magnetT=Math.max(0,(p.magnetT||0)-dt); p.invT=Math.max(0,(p.invT||0)-dt); p.shootCd=Math.max(0,p.shootCd-dt);
       p.crouch=false;
       const run=In.down('run')||p.speedT>0;
@@ -310,12 +312,13 @@
       p.vy+=GRAV*dt; p.vy=Math.min(1100,p.vy);
       const wasAir=!p.onGround, fallV=p.vy;
       this.collideMove(p,dt);
-      if(p.onGround&&wasAir&&fallV>500){ this.burst(p.x+p.w/2,p.y+p.h,'#fff',8); }
+      if(p.onGround&&wasAir){ p.landT=fallV>500?0.16:0.08; if(fallV>500){ this.burst(p.x+p.w/2,p.y+p.h,'#fff',8); } } // landT: visual landing squash only
       // ride moving platform vertical
       if(p.ground&&p.ground.type==='move'&&p.ground.axis==='y'){ /* carried in collide */ }
       p.ground=null;
       // state
       p.state=!p.onGround?(p.vy<0?'jump':'fall'):(Math.abs(p.vx)>250?'run':Math.abs(p.vx)>20?'walk':'idle');
+      p.idleT=(p.state==='idle'&&p.onGround)?((p.idleT||0)+dt):0; // visual: time spent standing still
       // interactions
       const L=this.level, me={x:p.x-4,y:p.y-4,w:p.w+8,h:p.h+8};
       const magR=p.magnetT>0?150:0, pcx=p.x+p.w/2, pcy=p.y+p.h/2;
@@ -732,17 +735,75 @@
     },
     drawPlayer(c){
       const p=this.player; if(!p) return;
+      // render dt for frame-rate-independent visual smoothing (render runs on rAF)
+      const now=(typeof performance!=='undefined')?performance.now():0;
+      let vdt=Math.min(0.05,Math.max(0,now-(this._vLast||now))/1000); this._vLast=now;
+      if(!(vdt>0)) vdt=1/60;
+      if(!p.vA) p.vA={y:0,sx:1,sy:1,lean:0};
+      const v=p.vA;
+      const amp=this.settings.reducedMotion?0.35:1; // visual softening only; physics untouched
       const blink=p.iframes>0&&Math.floor(this.tGlobal*14)%2===0;
       c.save(); if(blink) c.globalAlpha=0.45;
       const cx=p.x+p.w/2, feet=p.y+p.h;
       c.fillStyle='rgba(0,0,0,0.32)'; c.beginPath(); c.ellipse(cx,feet+4,p.w/2,5,0,0,7); c.fill();
-      const squash=p.state==='jump'?0.92:(p.state==='fall'?1.06:1+Math.sin(p.anim*10)*0.02);
-      c.translate(cx,feet); c.scale(p.face,1); c.scale(1,squash); c.translate(-cx,-feet);
-      // Custom character sprite (Character.png, 500x500): aspect-preserved,
-      // height fitted to the hitbox (p.h), centered on cx, feet-anchored.
-      // Hitbox (p.x/p.y/p.w/p.h), physics and mirroring logic are unchanged.
-      if(this.charImg&&this.charReady){
-        try{ c.drawImage(this.charImg,cx-p.h/2,p.y,p.h,p.h); }catch(e){}
+      if(p.dead>0){
+        // DEATH (top priority): one clean spin + fade over the 1.2s death
+        // window. Derived from p.dead so it is continuous; respawn/game-over
+        // flow is untouched and the next state renders normally by itself.
+        const t=Math.min(1,Math.max(0,(1.2-p.dead)/1.2));
+        c.translate(cx,p.y+p.h/2); c.rotate(t*Math.PI*2);
+        if(p.dead<0.4) c.globalAlpha*=Math.max(0,p.dead/0.4);
+        if(this.charImg&&this.charReady){
+          try{ c.drawImage(this.charImg,-p.h/2,-p.h/2,p.h,p.h); }catch(e){}
+        }
+      } else {
+        /* Visual animation selector — priority: damage > victory > jump/fall
+           > crouch > run > walk > idle. Reads EXISTING state only (p.state is
+           vy/physics-derived so jump/fall can never flutter). Character.png
+           is a single 500x500 figure (verified: one bbox, no sheet grid), so
+           every state is a polished transform of that same image: bobbing,
+           squash/stretch, lean and offsets — appearance never changes. */
+        const a=p.anim;
+        let tY=0,tSX=1,tSY=1,tLean=0,jx=0;
+        if(p.hurtT>0){ // DAMAGE: brief flinch + jitter over the existing blink
+          const h=Math.max(0,p.hurtT/0.3);
+          tSX=1+0.10*h*amp; tSY=1-0.10*h*amp; jx=(Math.random()-0.5)*4*h*amp;
+        } else if(p.win>0){ // VICTORY: celebration bounce (tGlobal: p.anim freezes during win)
+          const w=Math.sin(this.tGlobal*9);
+          tY=-Math.abs(w)*6*amp; tSY=1+w*0.03*amp;
+        } else if(p.state==='jump'){ // JUMPING: stable upward stretch
+          tSY=1.07; tSX=0.95; tY=-2*amp;
+        } else if(p.state==='fall'){ // FALLING: stable slight stretch, settles down
+          tSY=1.03; tSX=0.98; tY=1*amp;
+        } else if(p.crouch){ // CROUCHING: visibly shorter, feet stay planted
+          tSY=0.78; tSX=1.10;
+        } else if(p.state==='run'){ // RUNNING: faster + stronger than walk, forward lean
+          const w=Math.sin(a*16);
+          tY=w*3*amp; tSY=1+w*0.03*amp; tSX=1-w*0.03*amp; tLean=0.07*amp;
+        } else if(p.state==='walk'){ // WALKING: moderate rhythmic bob
+          const w=Math.sin(a*10);
+          tY=w*2.2*amp; tSY=1+w*0.02*amp; tSX=1-w*0.02*amp;
+        } else { // IDLE: slow subtle breathing; a touch deeper after 4s still
+          const deep=(p.idleT||0)>4?1:0;
+          tY=(Math.sin(a*2.4)*1.5+deep*Math.sin(a*1.2)*1.0)*amp;
+          tSY=1+Math.sin(a*2.4)*0.01*amp;
+        }
+        if(p.landT>0){ // LANDING: small decaying squash on any touchdown
+          const l=Math.max(0,p.landT/0.16);
+          tSY-=0.12*l; tSX+=0.10*l;
+        }
+        // exp smoothing toward targets: no snapping between states, speed
+        // independent of frame rate (dt-driven, not frame-driven)
+        const k=1-Math.exp(-vdt*12), kl=1-Math.exp(-vdt*8);
+        v.y+=(tY-v.y)*k; v.sx+=(tSX-v.sx)*k; v.sy+=(tSY-v.sy)*k; v.lean+=(tLean-v.lean)*kl;
+        // feet-anchored: squash never moves the feet; mirror preserved, lean
+        // applied inside mirrored space so it always tilts toward facing
+        c.translate(cx+jx,feet); c.scale(p.face,1); c.rotate(v.lean); c.scale(v.sx,v.sy); c.translate(-cx,-feet);
+        // Custom character sprite: aspect-preserved square fitted to hitbox
+        // height, centered, feet-anchored. Hitbox itself is never touched.
+        if(this.charImg&&this.charReady){
+          try{ c.drawImage(this.charImg,cx-p.h/2,p.y+v.y,p.h,p.h); }catch(e){}
+        }
       }
       // shield / powers aura
       if(p.shield){ c.strokeStyle='#5DF2C8'; c.lineWidth=3; c.globalAlpha=0.8; c.beginPath(); c.arc(cx,p.y+p.h/2,30+Math.sin(this.tGlobal*5)*3,0,7); c.stroke(); c.globalAlpha=blink?0.45:1; }
