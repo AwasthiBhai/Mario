@@ -22,7 +22,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/main.css?v=10">
+<link rel="stylesheet" href="css/main.css?v=12">
 </head>
 <body>
 <!-- ============ CINEMATIC INTRO ============ -->
@@ -66,7 +66,9 @@
     <button data-nav="home" class="nav-link active">Home</button>
     <button data-nav="game" class="nav-link">Game</button>
     <button data-nav="levels" class="nav-link">Levels</button>
+    <button data-nav="leaderboard" class="nav-link">Leaderboard</button>
     <button data-nav="reviews" class="nav-link">Reviews</button>
+    <button data-nav="profile" class="nav-link">Profile</button>
     <button data-nav="settings" class="nav-link">Settings</button>
     <button data-nav="credits" class="nav-link">Credits</button>
     <button data-nav="about" class="nav-link">About</button>
@@ -80,7 +82,8 @@
 </header>
 <div id="mobileNav" class="mobile-nav hidden">
   <button data-nav="home">Home</button><button data-nav="game">Game</button>
-  <button data-nav="levels">Levels</button><button data-nav="reviews">Reviews</button>
+  <button data-nav="levels">Levels</button><button data-nav="leaderboard">Leaderboard</button>
+  <button data-nav="reviews">Reviews</button><button data-nav="profile">Profile</button>
   <button data-nav="settings">Settings</button><button data-nav="credits">Credits</button>
   <button data-nav="about">About</button>
 </div>
@@ -157,7 +160,7 @@
   <div class="section wrap split">
     <div class="card glow">
       <h3>About the game</h3>
-      <p><strong>STARBOUND</strong> is a complete browser platformer built with canvas, vanilla JS modules and generative audio. No downloads, no accounts — your progress stays on this device.</p>
+      <p><strong>STARBOUND</strong> is a complete browser platformer built with canvas, vanilla JS modules and generative audio. No downloads — play instantly, keep progress on this device, or create a free global profile to sync records and climb the worldwide leaderboard.</p>
       <h3>Studio</h3>
       <p><strong>BundLal Studios</strong> — small team, big skies. We make cozy-but-challenging adventures with original art, music and code.</p>
       <button class="btn btn-gold btn-sm" data-nav="about">More about →</button>
@@ -281,6 +284,22 @@
   </div>
 </section>
 
+<!-- ============ LEADERBOARD ============ -->
+<section id="view-leaderboard" class="view">
+  <div class="wrap narrow">
+    <h2>Leaderboard <small>global records, shared by players everywhere</small></h2>
+    <div id="leaderboardRoot"></div>
+  </div>
+</section>
+
+<!-- ============ PROFILE ============ -->
+<section id="view-profile" class="view">
+  <div class="wrap narrow">
+    <h2>Profile <small>your global player identity</small></h2>
+    <div id="profileRoot"></div>
+  </div>
+</section>
+
 <!-- ============ REVIEWS ============ -->
 <section id="view-reviews" class="view">
   <div class="wrap narrow">
@@ -396,11 +415,11 @@
 <footer class="footer">
   <div class="wrap foot-grid">
     <div><img class="foot-logo-img" src="./favicon.png" alt="STARBOUND logo" width="500" height="500"><strong>✦ STARBOUND</strong><br><span class="muted">Light every beacon. Reclaim the sky. · © 2026 BundLal Studios. All original content.</span></div>
-    <div class="foot-links"><button data-nav="game">Play</button><button data-nav="levels">Levels</button><button data-nav="reviews">Reviews</button><button data-nav="settings">Settings</button><button data-nav="credits">Credits</button></div>
+    <div class="foot-links"><button data-nav="game">Play</button><button data-nav="levels">Levels</button><button data-nav="leaderboard">Leaderboard</button><button data-nav="reviews">Reviews</button><button data-nav="profile">Profile</button><button data-nav="settings">Settings</button><button data-nav="credits">Credits</button></div>
   </div>
 </footer>
 
-<script src="js/audio.js?v=11"></script>
+<script src="js/audio.js?v=12"></script>
 <script>
 /* STARBOUND — SP_Audio load guard (mobile-safe boot, deterministic order).
    Classic scripts execute in tag order with no defer/async, so audio.js
@@ -443,15 +462,19 @@
   }catch(e){ try{ if(!g.SP_Audio) g.SP_Audio={settings:{master:80,music:70,sfx:80,muted:false},state:'website',disabled:true,init:function(){},resume:function(){},applyVolumes:function(){},setVolumes:function(){},songPlay:function(){},songPause:function(){},setState:function(){},duck:function(){},sfx:function(){},tone:function(){},noise:function(){},jingle:function(){},playMusic:function(){},stopMusic:function(){},stopTimerOnly:function(){}}; }catch(_){} }
 })(window);
 </script>
-<script src="js/theme.js?v=11"></script>
-<script src="js/save.js?v=11"></script>
-<script src="js/reviews-config.js?v=11"></script>
-<script src="js/reviews.js?v=11"></script>
-<script src="js/input.js?v=11"></script>
-<script src="js/levels.js?v=11"></script>
-<script src="js/engine.js?v=11"></script>
-<script src="js/ui.js?v=11"></script>
-<script src="js/intro.js?v=11"></script>
-<script src="js/main.js?v=11"></script>
+<script src="js/theme.js?v=12"></script>
+<script src="js/save.js?v=12"></script>
+<script src="js/reviews-config.js?v=12"></script>
+<script src="js/reviews.js?v=12"></script>
+<script src="js/profiles-config.js?v=12"></script>
+<script src="js/profiles.js?v=12"></script>
+<script src="js/avatars.js?v=12"></script>
+<script src="js/input.js?v=12"></script>
+<script src="js/levels.js?v=12"></script>
+<script src="js/engine.js?v=12"></script>
+<script src="js/ui.js?v=12"></script>
+<script src="js/profiles-ui.js?v=12"></script>
+<script src="js/intro.js?v=12"></script>
+<script src="js/main.js?v=12"></script>
 </body>
 </html>

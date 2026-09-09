@@ -1,0 +1,63 @@
+# Daily safety backup of the public global-profiles document.
+#
+# This workflow is NOT part of the profile runtime path: account creation,
+# edits and stat syncs go directly between browsers and the shared backend
+# (same MantleDB service as Reviews, entry `profiles-v1`). This job only
+# keeps a versioned copy (data/profiles-backup.json) so profiles can be
+# restored after vandalism or backend expiry. It uses NO secrets — the backup
+# reads the same public document every visitor's browser reads.
+#
+# RESTORE RUNBOOK (maintainer, if the live document is ever wiped):
+#   1. Take the newest good data/profiles-backup.json content.
+#   2. POST it back: curl -X POST
+#      https://mantledb.sh/v2/starlit-pip-guestbook/profiles-v1
+#      -H "Content-Type: application/json" -d @data/profiles-backup.json
+#      (Node fetch works headless; some curl builds trip bot protection —
+#      the game itself always writes from real browsers.)
+#   3. Verify: open the Leaderboard on the live site.
+#
+# PRIVACY NOTE: the backup contains the same public document browsers read.
+# Product surfaces never expose private IDs / secret hashes (see
+# js/profiles.js publicUser()), but treat the backup file as production data:
+# do not publish its contents anywhere except restoring this same entry.
+#
+# If pushes fail with 403: Repo → Settings → Actions → General → Workflow
+# permissions → "Read and write permissions".
+
+name: Backup global profiles
+
+on:
+  schedule:
+    - cron: "45 4 * * *" # daily, 04:45 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch public profiles document
+        run: |
+          curl -s --max-time 30 \
+            "https://mantledb.sh/v2/starlit-pip-guestbook/profiles-v1" \
+            -o /tmp/profiles-live.json
+          node -e "const d=require('/tmp/profiles-live.json');if(!d||!Array.isArray(d.users))throw new Error('unexpected shape');console.log('live profiles: '+d.users.length)"
+          mkdir -p data
+          cp /tmp/profiles-live.json data/profiles-backup.json
+
+      - name: Commit backup if changed
+        run: |
+          if git diff --quiet -- data/profiles-backup.json; then
+            echo "Backup unchanged."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/profiles-backup.json
+          git commit -m "Backup global profiles snapshot"
+          git push
