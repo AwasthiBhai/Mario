@@ -400,16 +400,58 @@
   </div>
 </footer>
 
-<script src="js/audio.js?v=10"></script>
-<script src="js/theme.js?v=10"></script>
-<script src="js/save.js?v=10"></script>
-<script src="js/reviews-config.js?v=10"></script>
-<script src="js/reviews.js?v=10"></script>
-<script src="js/input.js?v=10"></script>
-<script src="js/levels.js?v=10"></script>
-<script src="js/engine.js?v=10"></script>
-<script src="js/ui.js?v=10"></script>
-<script src="js/intro.js?v=10"></script>
-<script src="js/main.js?v=10"></script>
+<script src="js/audio.js?v=11"></script>
+<script>
+/* STARBOUND — SP_Audio load guard (mobile-safe boot, deterministic order).
+   Classic scripts execute in tag order with no defer/async, so audio.js
+   normally defines window.SP_Audio before any dependent runs. But if the
+   audio.js request ever fails (flaky mobile network, stale cache serving a
+   mismatched bundle, blocked request), later classic scripts still execute
+   and bare `SP_Audio` references threw `ReferenceError: SP_Audio is not
+   defined`, aborting the whole boot inside main.js. This inline guard runs
+   immediately after the audio.js tag and guarantees window.SP_Audio always
+   exists with the full public API as silent no-ops, so the game boots and
+   plays without audio. If audio.js loaded normally this block is a no-op
+   and never replaces the real manager (no duplicate audio, MarioSong kept).
+   No setTimeout/delay — purely synchronous and deterministic. */
+(function(g){
+  try{
+    var a=g.SP_Audio;
+    if(a&&typeof a.setState==='function'&&typeof a.sfx==='function'&&typeof a.init==='function') return;
+    var base=(a&&typeof a==='object')?a:{};
+    function noop(){}
+    if(typeof base.init!=='function') base.init=function(s){ try{ if(s) this.settings=Object.assign(this.settings||{master:80,music:70,sfx:80,muted:false},s); }catch(e){} };
+    if(typeof base.resume!=='function') base.resume=noop;
+    if(typeof base.applyVolumes!=='function') base.applyVolumes=noop;
+    if(typeof base.setVolumes!=='function') base.setVolumes=function(s){ try{ if(s) this.settings=Object.assign(this.settings||{},s); }catch(e){} };
+    if(typeof base.songPlay!=='function') base.songPlay=noop;
+    if(typeof base.songPause!=='function') base.songPause=noop;
+    if(typeof base.setState!=='function') base.setState=function(st){ try{ this.state=st||'website'; }catch(e){} };
+    if(typeof base.duck!=='function') base.duck=noop;
+    if(typeof base.sfx!=='function') base.sfx=noop;
+    if(typeof base.tone!=='function') base.tone=noop;
+    if(typeof base.noise!=='function') base.noise=noop;
+    if(typeof base.jingle!=='function') base.jingle=noop;
+    if(typeof base.playMusic!=='function') base.playMusic=noop;
+    if(typeof base.stopMusic!=='function') base.stopMusic=noop;
+    if(typeof base.stopTimerOnly!=='function') base.stopTimerOnly=noop;
+    if(!base.settings||typeof base.settings!=='object') base.settings={master:80,music:70,sfx:80,muted:false};
+    if(typeof base.state!=='string') base.state='website';
+    if(typeof base.disabled==='undefined') base.disabled=true;
+    if(!('musicKind' in base)) base.musicKind=null;
+    g.SP_Audio=base;
+  }catch(e){ try{ if(!g.SP_Audio) g.SP_Audio={settings:{master:80,music:70,sfx:80,muted:false},state:'website',disabled:true,init:function(){},resume:function(){},applyVolumes:function(){},setVolumes:function(){},songPlay:function(){},songPause:function(){},setState:function(){},duck:function(){},sfx:function(){},tone:function(){},noise:function(){},jingle:function(){},playMusic:function(){},stopMusic:function(){},stopTimerOnly:function(){}}; }catch(_){} }
+})(window);
+</script>
+<script src="js/theme.js?v=11"></script>
+<script src="js/save.js?v=11"></script>
+<script src="js/reviews-config.js?v=11"></script>
+<script src="js/reviews.js?v=11"></script>
+<script src="js/input.js?v=11"></script>
+<script src="js/levels.js?v=11"></script>
+<script src="js/engine.js?v=11"></script>
+<script src="js/ui.js?v=11"></script>
+<script src="js/intro.js?v=11"></script>
+<script src="js/main.js?v=11"></script>
 </body>
 </html>

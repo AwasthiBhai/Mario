@@ -1,6 +1,17 @@
 /* STARBOUND — Engine: physics, camera, entities, bosses, particles, rendering */
 (function(global){
   'use strict';
+  /* Mobile-safe audio: js/audio.js defines window.SP_Audio first in
+     index.html order, plus an inline no-op guard covers a failed fetch.
+     Still, a stale cached bundle must never crash gameplay, so every SFX
+     goes through this guarded helper — a missing/blocked audio manager is
+     silently skipped instead of throwing (no ReferenceError/TypeError). */
+  function sfx(name){
+    try{
+      var a=global.SP_Audio;
+      if(a&&typeof a.sfx==='function') a.sfx(name);
+    }catch(e){}
+  }
   const TILE=32, VIEW_W=960, VIEW_H=540, GRAV=2400;
   const ENEMY_DEF={
     walker:{w:30,h:26,speed:55,hp:1,score:100,color:'#7ed957',eye:'#123'},
@@ -80,8 +91,8 @@
       const p=this.player; if(!p||p.iframes>0||p.dead||this.completed) return;
       if(!isFinite(fromX)) fromX=p.x+p.w/2; // defensive: never inherit NaN knockback
       if(p.invT>0){ this.burst(p.x+p.w/2,p.y+p.h/2,'#FFC94D',6); return; } // invincible: no damage, no knockback
-      if(p.shield){ p.shield=false; p.iframes=1.5; global.SP_Audio.sfx('hurt'); this.burst(p.x,p.y,'#5DF2C8',14); this.floater(p.x,p.y-20,'SHIELD!', '#5DF2C8'); return; }
-      p.hp--; p.iframes=1.5; global.SP_Audio.sfx('hurt'); this.cam.shake=8;
+      if(p.shield){ p.shield=false; p.iframes=1.5; sfx('hurt'); this.burst(p.x,p.y,'#5DF2C8',14); this.floater(p.x,p.y-20,'SHIELD!', '#5DF2C8'); return; }
+      p.hp--; p.iframes=1.5; sfx('hurt'); this.cam.shake=8;
       this.burst(p.x+p.w/2,p.y+p.h/2,'#FF6B6B',16);
       p.vy=-420; p.vx=(p.x+p.w/2<fromX?-1:1)*220;
       if(p.hp<=0) this.killPlayer();
@@ -89,7 +100,7 @@
     },
     killPlayer(){
       const p=this.player; if(p.dead) return; p.dead=1.2; p.vy=-550;
-      global.SP_Audio.sfx('death'); this.burst(p.x,p.y,'#FFC94D',24);
+      sfx('death'); this.burst(p.x,p.y,'#FFC94D',24);
       const run=this._run, lv=this.levelNum;
       setTimeout(()=>{
         if(this._run!==run||this.levelNum!==lv||!this.level) return;
@@ -104,7 +115,7 @@
       if(this.completed) return; this.completed=true;
       const timeBonus=Math.max(0,Math.floor(this.timeLeft))*10;
       this.score+=1000+timeBonus+this.lives*200;
-      global.SP_Audio.sfx('goal');
+      sfx('goal');
       this.confetti(this.player.x,this.player.y-40);
       const res={score:this.score,coins:this.coinCount,collected:this.coinCount,spent:this.coinCount-this.levelCoins,remaining:this.levelCoins,totalCoins:this.coinTotal,relic:this.relicGot,time:this.time,best:timeBonus,secrets:this.secretCount,lives:this.lives};
       const run=this._run, lv=this.levelNum;
@@ -164,20 +175,20 @@
         }
         if(!s.revealed){
           // bump hidden from below
-          if(p.vy<0&&aabb(p,s)){ s.revealed=true; s.hit=true; global.SP_Audio.sfx('secret'); this.floater(s.x+s.w/2,s.y-16,'SECRET!','#B388FF'); this.score+=200; this.secretCount++; this.burst(s.x+s.w/2,s.y,'#B388FF',12); p.vy=120; }
+          if(p.vy<0&&aabb(p,s)){ s.revealed=true; s.hit=true; sfx('secret'); this.floater(s.x+s.w/2,s.y-16,'SECRET!','#B388FF'); this.score+=200; this.secretCount++; this.burst(s.x+s.w/2,s.y,'#B388FF',12); p.vy=120; }
           continue;
         }
         if(aabb(p,s)){
           if(p.vy>0&&prevBottom<=s.y+landTol){
             p.y=s.y-p.h; p.vy=0; p.onGround=true; p.ground=s;
-            if(s.type==='bouncy'){ p.vy=-950; global.SP_Audio.sfx('spring'); this.burst(p.x,p.y+p.h,'#5DF2C8',10); }
+            if(s.type==='bouncy'){ p.vy=-950; sfx('spring'); this.burst(p.x,p.y+p.h,'#5DF2C8',10); }
             if(s.type==='fall'){ s.fallT+=dt; }
-            if(s.type==='break'&&!s.hit){ s.hit=true; s.gone=true; global.SP_Audio.sfx('break'); this.burst(s.x+s.w/2,s.y,'#c98a4d',12); }
+            if(s.type==='break'&&!s.hit){ s.hit=true; s.gone=true; sfx('break'); this.burst(s.x+s.w/2,s.y,'#c98a4d',12); }
             if(s.type==='move'&&s.axis==='x') p.x+=(s.dx||0);
             if(s.type==='move'&&s.axis==='y') p.y+=(s.dy||0);
           } else if(p.vy<0){
             p.y=s.y+s.h; p.vy=0;
-            if(s.type==='break'&&!s.hit){ s.hit=true; s.gone=true; global.SP_Audio.sfx('break'); this.burst(s.x+s.w/2,s.y+s.h,'#c98a4d',12); }
+            if(s.type==='break'&&!s.hit){ s.hit=true; s.gone=true; sfx('break'); this.burst(s.x+s.w/2,s.y+s.h,'#c98a4d',12); }
           }
         }
       }
@@ -277,7 +288,7 @@
       if(p.jbuf>0&&p.coyote>0){
         const boost=p.jumpT>0?1.35:1;
         p.vy=-(745)*boost; p.onGround=false; p.coyote=0; p.jbuf=0;
-        global.SP_Audio.sfx('jump');
+        sfx('jump');
         this.burst(p.x+p.w/2,p.y+p.h,'#ffffff',6);
       }
       // variable jump
@@ -301,11 +312,11 @@
           const dx=pcx-c.x, dy=pcy-c.y, d=Math.sqrt(dx*dx+dy*dy);
           if(d<magR&&d>4){ const step=Math.min(d,460*dt); c.x+=dx/d*step; c.y+=dy/d*step; }
         }
-        if(Math.abs(c.x-pcx)<26&&Math.abs(c.y-pcy)<34){ c.taken=true; this.coinCount++; this.levelCoins++; this.score+=c.secret?200:50; global.SP_Audio.sfx('coin'); this.burst(c.x,c.y,'#FFC94D',8); this.floater(c.x,c.y-14,'+'+(c.secret?200:50),'#FFC94D'); }
+        if(Math.abs(c.x-pcx)<26&&Math.abs(c.y-pcy)<34){ c.taken=true; this.coinCount++; this.levelCoins++; this.score+=c.secret?200:50; sfx('coin'); this.burst(c.x,c.y,'#FFC94D',8); this.floater(c.x,c.y-14,'+'+(c.secret?200:50),'#FFC94D'); }
       }
-      if(L.relic&&!L.relic.taken&&Math.abs(L.relic.x-(p.x+p.w/2))<28&&Math.abs(L.relic.y-(p.y+p.h/2))<36){ L.relic.taken=true; this.relicGot=true; this.score+=500; global.SP_Audio.sfx('relic'); this.floater(L.relic.x,L.relic.y-20,'★ RELIC +500','#B388FF'); this.confetti(L.relic.x,L.relic.y); }
+      if(L.relic&&!L.relic.taken&&Math.abs(L.relic.x-(p.x+p.w/2))<28&&Math.abs(L.relic.y-(p.y+p.h/2))<36){ L.relic.taken=true; this.relicGot=true; this.score+=500; sfx('relic'); this.floater(L.relic.x,L.relic.y-20,'★ RELIC +500','#B388FF'); this.confetti(L.relic.x,L.relic.y); }
       for(const u of L.powerups){ if(!u.taken&&Math.abs(u.x-(p.x+p.w/2))<28&&Math.abs(u.y-(p.y+p.h/2))<36){ u.taken=true; this.applyPower(u.kind); } }
-      for(const c of L.checkpoints){ if(!c.on&&Math.abs(c.x-(p.x+p.w/2))<30&&(p.y<500)){ c.on=true; this.checkpoint=this.sanitizeCheckpoint({x:c.x,y:this.groundTopAt(c.x)-p.h-2}); this.score+=50; global.SP_Audio.sfx('checkpoint'); this.floater(c.x,300,'CHECKPOINT!','#5DF2C8'); this.burst(c.x,340,'#5DF2C8',14);} }
+      for(const c of L.checkpoints){ if(!c.on&&Math.abs(c.x-(p.x+p.w/2))<30&&(p.y<500)){ c.on=true; this.checkpoint=this.sanitizeCheckpoint({x:c.x,y:this.groundTopAt(c.x)-p.h-2}); this.score+=50; sfx('checkpoint'); this.floater(c.x,300,'CHECKPOINT!','#5DF2C8'); this.burst(c.x,340,'#5DF2C8',14);} }
       // checkpoint y resolve: stored ground-resolved at trigger time (see above)
       // hazards: every hazard only deals damage + knockback. Checkpoint
       // respawns happen exclusively through the death path (killPlayer) or a
@@ -326,7 +337,7 @@
         if(stomping){
           if(def.armored&&e.hp>1&&!p.starT){ this.hurtPlayer(e.x+e.w/2); continue; }
           e.alive=false; p.vy=-520; p.onGround=false;
-          this.score+=def.score; global.SP_Audio.sfx('stomp'); this.burst(e.x,e.y,'#fff',12); this.floater(e.x,e.y-14,'+'+def.score,'#fff');
+          this.score+=def.score; sfx('stomp'); this.burst(e.x,e.y,'#fff',12); this.floater(e.x,e.y-14,'+'+def.score,'#fff');
         } else {
           this.hurtPlayer(e.x+e.w/2);
         }
@@ -373,14 +384,14 @@
       if(id==='shield') p.shield=true;
       if(id==='life') this.lives=Math.min(5,this.lives+1);
       if(id==='star') p.invT=15;
-      global.SP_Audio.sfx('power');
+      sfx('power');
       this.burst(p.x+p.w/2,p.y+p.h/2,'#FFC94D',14);
       this.floater(p.x,p.y-24,item.name+'!','#FFC94D');
       if(this.cb.onHud) this.cb.onHud(this.hud());
       return {ok:true,msg:item.name+' active!',remaining:this.levelCoins};
     },
     applyPower(kind){
-      const p=this.player; global.SP_Audio.sfx('power');
+      const p=this.player; sfx('power');
       if(kind==='heart'){ p.hp=Math.min(p.maxhp,p.hp+1); this.floater(p.x,p.y-20,'+HEART','#FF6B6B'); }
       if(kind==='shield'){ p.shield=true; this.floater(p.x,p.y-20,'SHIELD!','#5DF2C8'); }
       if(kind==='speed'){ p.speedT=12; this.floater(p.x,p.y-20,'SWIFT!','#FFD166'); }
@@ -416,7 +427,7 @@
         if(e.kind==='patroller') vx=e.dir*def.speed;
         if(e.kind==='brute') vx=e.dir*def.speed;
         if(e.kind==='spitter') vx=e.dir*def.speed*0.6;
-        if(e.kind==='hopper'){ vx=e.dir*def.speed; if(e.onG){ e.vy=-560; e.onG=false; global.SP_Audio; } }
+        if(e.kind==='hopper'){ vx=e.dir*def.speed; if(e.onG){ e.vy=-560; e.onG=false; } }
         if(e.kind==='flyer'){ e.ph+=dt*2; vx=e.dir*def.speed; e.vy=Math.sin(e.ph)*90; e.y+=e.vy*dt; }
         e.x+=vx*dt;
         if(!def.fly){ e.y+=(e.vy||0)*dt; e.onG=false;
@@ -430,7 +441,7 @@
         // turn at edges/level bounds
         if(e.x<10){e.x=10;e.dir=1;} if(e.x>this.level.width-40){e.x=this.level.width-40;e.dir=-1;}
         // spitter shooting
-        if(def.shoot){ e.shootT-=dt; if(e.shootT<=0&&Math.abs(e.x-p.x)<420&&e.alive){ e.shootT=2.2; this.eshots.push({x:e.x,y:e.y,vx:(p.x>e.x?1:-1)*200,vy:-80,w:10,h:10,t:3}); global.SP_Audio.sfx('shoot'); } }
+        if(def.shoot){ e.shootT-=dt; if(e.shootT<=0&&Math.abs(e.x-p.x)<420&&e.alive){ e.shootT=2.2; this.eshots.push({x:e.x,y:e.y,vx:(p.x>e.x?1:-1)*200,vy:-80,w:10,h:10,t:3}); sfx('shoot'); } }
         // hop sound-less
       }
       // enemy projectiles gravity
@@ -460,7 +471,7 @@
       if(B.shootT<=0){ B.shootT=Math.max(0.7,2.2-phase*0.4);
         const n=phase>=2?2:1;
         for(let i=0;i<n;i++) this.eshots.push({x:B.x+B.w/2,y:B.y+10,vx:(p.x>B.x?-1:1)*(220+phase*40)+(i-0.5)*60,vy:-160,w:12,h:12,t:3.5});
-        global.SP_Audio.sfx('shoot');
+        sfx('shoot');
       }
       // contact with player
       const me={x:p.x-4,y:p.y-4,w:p.w+8,h:p.h+8}, bb={x:B.x,y:B.y,w:B.w,h:B.h};
@@ -472,10 +483,10 @@
     },
     hitBoss(){
       const B=this.level.boss; if(!B||B.dead||B.hurtT>0) return;
-      B.hp--; B.hurtT=0.8; global.SP_Audio.sfx('bossHit'); this.cam.shake=12;
+      B.hp--; B.hurtT=0.8; sfx('bossHit'); this.cam.shake=12;
       this.burst(B.x+B.w/2,B.y+B.h/2,'#FFC94D',22); this.score+=500;
       this.floater(B.x,B.y-20,'BOSS -1 ('+B.hp+')','#FF6B6B');
-      if(B.hp<=0){ B.dead=true; global.SP_Audio.sfx('bossDie'); this.confetti(B.x,B.y); this.score+=2000; this.floater(B.x,B.y-40,'BOSS DOWN! +2000','#FFC94D'); if(this.cb.onHud) this.cb.onHud(this.hud()); }
+      if(B.hp<=0){ B.dead=true; sfx('bossDie'); this.confetti(B.x,B.y); this.score+=2000; this.floater(B.x,B.y-40,'BOSS DOWN! +2000','#FFC94D'); if(this.cb.onHud) this.cb.onHud(this.hud()); }
       if(this.cb.onHud) this.cb.onHud(this.hud());
     },
     updateShots(dt){
@@ -483,8 +494,8 @@
         const sb={x:s.x,y:s.y,w:s.w,h:s.h};
         for(const e of this.level.enemies){ if(!e.alive) continue;
           if(aabb(sb,{x:e.x,y:e.y,w:e.w,h:e.h})){ e.hp--; e.flash=0.15; s.t=0;
-            if(e.hp<=0){ e.alive=false; this.score+=ENEMY_DEF[e.kind].score+50; global.SP_Audio.sfx('stomp'); this.burst(e.x,e.y,'#FFC94D',12); }
-            else global.SP_Audio.sfx('bossHit');
+            if(e.hp<=0){ e.alive=false; this.score+=ENEMY_DEF[e.kind].score+50; sfx('stomp'); this.burst(e.x,e.y,'#FFC94D',12); }
+            else sfx('bossHit');
             break; } }
         const B=this.level.boss;
         if(B&&!B.dead&&aabb(sb,{x:B.x,y:B.y,w:B.w,h:B.h})){ s.t=0; this.hitBoss(); }

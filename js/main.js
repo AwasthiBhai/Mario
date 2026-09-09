@@ -4,7 +4,11 @@
   window.addEventListener('DOMContentLoaded',()=>{
     try{
       SP_Save.load();
-      SP_Audio.init(SP_Save.data.settings);
+      // Mobile-safe: audio must NEVER abort boot. If js/audio.js (or the
+      // inline guard) failed to provide SP_Audio, skip silently and let the
+      // ui/engine fallbacks keep gameplay running without sound.
+      // No setTimeout — synchronous guarded call in deterministic order.
+      try{ if(window.SP_Audio&&typeof window.SP_Audio.init==='function') window.SP_Audio.init(SP_Save.data.settings); }catch(e){ try{ console.warn('audio init skipped:',e); }catch(_){} }
       SP_Input.loadMap(SP_Save.data.settings.keys);
       SP_Engine.settings.shake=SP_Save.data.settings.shake!==false;
       SP_Engine.settings.reducedMotion=!!SP_Save.data.settings.reducedMotion;

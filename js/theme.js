@@ -48,7 +48,7 @@
       } catch (e) {}
       this.syncControls();
       if (!silent) {
-        try { if (global.SP_Audio && SP_Audio.sfx) SP_Audio.sfx('click'); } catch (e) {}
+        try { if (global.SP_Audio && typeof global.SP_Audio.sfx==='function') global.SP_Audio.sfx('click'); } catch (e) {}
       }
     },
     set: function (mode) {

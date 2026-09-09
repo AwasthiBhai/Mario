@@ -3,6 +3,40 @@
    (that cycle caused a stack overflow that made PLAY do nothing). */
 (function(global){
   'use strict';
+  /* Mobile-safe audio fallback (stale-cache defense): index.html already
+     loads js/audio.js first plus an inline no-op guard, so window.SP_Audio
+     normally exists before this file runs. If this bundle ever executes
+     against a stale cached page without that guard AND audio.js failed,
+     bare `SP_Audio` below would throw ReferenceError. Guarantee the full
+     public API here as silent no-ops — never a duplicate manager, only a
+     boot-saving shim that the real audio.js (when present) has already won. */
+  try{
+    var _a=global.SP_Audio;
+    var _ok=_a&&typeof _a.setState==='function'&&typeof _a.sfx==='function'&&typeof _a.init==='function';
+    if(!_ok){
+      var _base=(_a&&typeof _a==='object')?_a:{};
+      var _noop=function(){};
+      if(typeof _base.init!=='function') _base.init=function(s){ try{ if(s) this.settings=Object.assign(this.settings||{master:80,music:70,sfx:80,muted:false},s); }catch(e){} };
+      if(typeof _base.resume!=='function') _base.resume=_noop;
+      if(typeof _base.applyVolumes!=='function') _base.applyVolumes=_noop;
+      if(typeof _base.setVolumes!=='function') _base.setVolumes=function(s){ try{ if(s) this.settings=Object.assign(this.settings||{},s); }catch(e){} };
+      if(typeof _base.songPlay!=='function') _base.songPlay=_noop;
+      if(typeof _base.songPause!=='function') _base.songPause=_noop;
+      if(typeof _base.setState!=='function') _base.setState=function(st){ try{ this.state=st||'website'; }catch(e){} };
+      if(typeof _base.duck!=='function') _base.duck=_noop;
+      if(typeof _base.sfx!=='function') _base.sfx=_noop;
+      if(typeof _base.tone!=='function') _base.tone=_noop;
+      if(typeof _base.noise!=='function') _base.noise=_noop;
+      if(typeof _base.jingle!=='function') _base.jingle=_noop;
+      if(typeof _base.playMusic!=='function') _base.playMusic=_noop;
+      if(typeof _base.stopMusic!=='function') _base.stopMusic=_noop;
+      if(typeof _base.stopTimerOnly!=='function') _base.stopTimerOnly=_noop;
+      if(!_base.settings||typeof _base.settings!=='object') _base.settings={master:80,music:70,sfx:80,muted:false};
+      if(typeof _base.state!=='string') _base.state='website';
+      if(typeof _base.disabled==='undefined') _base.disabled=true;
+      global.SP_Audio=_base;
+    }
+  }catch(e){ try{ if(!global.SP_Audio) global.SP_Audio={settings:{master:80,music:70,sfx:80,muted:false},state:'website',disabled:true,init:function(){},resume:function(){},applyVolumes:function(){},setVolumes:function(){},songPlay:function(){},songPause:function(){},setState:function(){},duck:function(){},sfx:function(){},tone:function(){},noise:function(){},jingle:function(){},playMusic:function(){},stopMusic:function(){},stopTimerOnly:function(){}}; }catch(_){} }
   const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
   const UI={
     view:'home', currentLevel:1, carryScore:0, paused:false, inGame:false, completeRes:null,

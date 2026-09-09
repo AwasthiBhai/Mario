@@ -13,18 +13,29 @@
        duplicate instance, never a restart gap from recreation. */
     _songEl:null, _songSrc:'audio/MarioSong.mp3',
     init(settings){
-      if(settings) Object.assign(this.settings, settings);
-      const AC = (typeof window!=='undefined')&&(window.AudioContext||window.webkitAudioContext);
-      if(!AC){ this.disabled=true; return; }
+      try{
+        if(settings) Object.assign(this.settings, settings);
+      }catch(e){}
+      let AC=null;
+      try{ AC=(typeof window!=='undefined')&&(window.AudioContext||window.webkitAudioContext); }catch(e){ AC=null; }
+      if(!AC){ try{ this.disabled=true; }catch(e){} return; }
       if(!this.ctx){
-        this.ctx=new AC();
-        this.master=this.ctx.createGain(); this.master.connect(this.ctx.destination);
-        // chain: musicGain (user volume) -> duckGain (pause ducking) -> fadeGain (state fades) -> master
-        this.musicGain=this.ctx.createGain(); this.duckGain=this.ctx.createGain();
-        this.fadeGain=this.ctx.createGain(); this.fadeGain.gain.value=0;
-        this.musicGain.connect(this.duckGain); this.duckGain.connect(this.fadeGain); this.fadeGain.connect(this.master);
-        this.sfxGain=this.ctx.createGain(); this.sfxGain.connect(this.master);
-        this.applyVolumes();
+        // Mobile-safe: creating/resuming AudioContext can throw before a user
+        // gesture (iOS Safari) or on restricted browsers. Audio must NEVER
+        // throw out of init() and abort the game boot — degrade to silent.
+        try{
+          this.ctx=new AC();
+          this.master=this.ctx.createGain(); this.master.connect(this.ctx.destination);
+          // chain: musicGain (user volume) -> duckGain (pause ducking) -> fadeGain (state fades) -> master
+          this.musicGain=this.ctx.createGain(); this.duckGain=this.ctx.createGain();
+          this.fadeGain=this.ctx.createGain(); this.fadeGain.gain.value=0;
+          this.musicGain.connect(this.duckGain); this.duckGain.connect(this.fadeGain); this.fadeGain.connect(this.master);
+          this.sfxGain=this.ctx.createGain(); this.sfxGain.connect(this.master);
+          this.applyVolumes();
+        }catch(e){
+          try{ this.disabled=true; this.ctx=null; }catch(_){}
+          return;
+        }
       }
     },
     resume(){ try{ if(this.ctx&&this.ctx.state==='suspended') this.ctx.resume(); }catch(e){} },
@@ -308,4 +319,5 @@
     }
   };
   global.SP_Audio=AudioMan;
+  try{ if(typeof window!=='undefined') window.SP_Audio=AudioMan; }catch(e){}
 })(window);
