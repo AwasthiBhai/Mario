@@ -1431,6 +1431,12 @@ body.show-touch .touch {
   outline-offset: 2px
 }
 
+/* "Up next" card: breathing room between the description text and the
+   level-select button (button/card size and position unchanged). */
+#upNext + .btn {
+  margin-top: 10px
+}
+
 .slider-row {
   display: flex;
   align-items: center;
