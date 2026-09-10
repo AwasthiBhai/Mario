@@ -71,6 +71,39 @@
       if(!hasAccount()) clearGameplay(this.data);
       return this.data;
     },
+    /* Server-driven world reset: when the backend's profiles resetVersion
+       differs from this save's marker, the local gameplay belongs to an
+       older world (e.g. wiped database) and must go. ONLY gameplay fields
+       plus the sync outbox/profiles cache are dropped; settings, introSeen,
+       theme (own key) and sessions (own keys) are preserved. Idempotent:
+       equal versions are a no-op. Returns true when a reset ran. */
+    applyServerReset(serverRv){
+      try{
+        const rv=Math.floor(Number(serverRv));
+        if(!isFinite(rv)||rv<0||rv>99) return false;
+        if(this.data.gameDataResetVersion===rv) return false;
+        this.data.maxUnlocked=1;
+        this.data.levels={};
+        this.data.totalCoins=0; this.data.totalRelics=0; this.data.totalScore=0;
+        this.data.gameDataResetVersion=rv;
+        try{ localStorage.removeItem(OUTBOX_KEY); }catch(e){}
+        try{ localStorage.removeItem(PROFILES_CACHE_KEY); }catch(e){}
+        this.write();
+        return true;
+      }catch(e){ return false; }
+    },
+    /* Fresh-world wipe for a dead session (server no longer knows this
+       device's account): same gameplay-only clearing as above, keeping the
+       current marker. Never touches settings/theme/sessions. */
+    resetAfterWorldWipe(){
+      try{
+        clearGameplay(this.data);
+        try{ localStorage.removeItem(OUTBOX_KEY); }catch(e){}
+        try{ localStorage.removeItem(PROFILES_CACHE_KEY); }catch(e){}
+        this.write();
+        return true;
+      }catch(e){ return false; }
+    },
     /* One-time migration: pre-reset saves (no marker) lose ONLY gameplay
        progress — unlocks, per-level bests, coins, relics, totals — and land
        on a fresh Level-1 state. Settings, introSeen, theme (own key) and the

@@ -227,6 +227,48 @@
     root.appendChild(wrap);
   }
 
+  /* World sync: after every FRESH (non-stale) profiles read, align local
+   * gameplay with the server's world resetVersion. A wiped world leaves old
+   * unlocks stranded in this browser; the version gap triggers a
+   * gameplay-only reset (settings/theme/sessions preserved). */
+  function syncWorld(doc, stale){
+    try{
+      if(stale || !doc) return false;
+      if(global.SP_Save && typeof global.SP_Save.applyServerReset === 'function'){
+        return !!global.SP_Save.applyServerReset(doc.resetVersion);
+      }
+    }catch(e){}
+    return false;
+  }
+
+  /* Re-render Reviews immediately when auth state flips (no page refresh:
+   * the reviews form enables/disables live). */
+  function refreshReviewsIfVisible(){
+    try{
+      var u = UI();
+      if(u && u.view === 'reviews' && typeof u.renderReviews === 'function') u.renderReviews();
+    }catch(e){}
+  }
+
+  /* Dead-session cleanup: the server definitively no longer knows this
+   * device's account (world wipe or removed record) — drop local sessions,
+   * wipe stranded gameplay + sync state, and land on the signed-out view.
+   * Transient network failures NEVER trigger this (validateSession reports
+   * dead:false for them). */
+  function cleanupDeadSession(root, showNotice){
+    try{ P().signOutThisDevice(); }catch(e){}
+    try{
+      if(global.SP_Save && typeof global.SP_Save.resetAfterWorldWipe === 'function'){
+        global.SP_Save.resetAfterWorldWipe();
+      }
+    }catch(e){}
+    try{
+      if(showNotice) UI().notify('Your previous game world was reset. Starting fresh — Level 1 awaits!', 'warning');
+    }catch(e){}
+    renderSignedOut(root);
+    refreshReviewsIfVisible();
+  }
+
   /* ================= PROFILE VIEW ================= */
   function renderProfile(){
     var root = $('#profileRoot');
@@ -239,6 +281,8 @@
 
   function renderOwnerLoading(root){
     root.appendChild(statusLine('loading', '⟳ Loading your profile…'));
+    var hadLocal = false;
+    try{ hadLocal = !!(P().session() || P().authSession()); }catch(e){}
     P().load().then(function(res){
       root.innerHTML = '';
       if(!res.ok || !res.doc){
@@ -248,8 +292,20 @@
         var c = el('div', 'center'); c.appendChild(retry); root.appendChild(c);
         return;
       }
+      syncWorld(res.doc, res.stale);
       var me = P().me(res.doc);
-      if(!me){ // session no longer matches any server record
+      if(!me){
+        if(hadLocal){
+          // Local session exists but the server has no such account: confirm
+          // before wiping (a network blip on the owner read must not nuke).
+          root.appendChild(statusLine('loading', '⟳ Checking your sign-in…'));
+          P().validateSession().then(function(v){
+            root.innerHTML = '';
+            if(v && v.dead) cleanupDeadSession(root, true);
+            else renderSignedOut(root);
+          });
+          return;
+        }
         renderSignedOut(root);
         return;
       }
@@ -310,6 +366,7 @@
         P().signOut().then(function(){
           UI().notify('Signed out. Your account and progress are safe.', 'info');
           renderProfile();
+          refreshReviewsIfVisible();
         });
       });
     });
@@ -480,6 +537,7 @@
         pwIn.value = '';
         UI().notify('Welcome to the global leaderboard, ' + res.user.name + '!', 'success');
         renderProfile();
+        refreshReviewsIfVisible();
       });
     });
     card.appendChild(go);
@@ -521,6 +579,7 @@
         if(!res.ok){ err.textContent = res.error; return; }
         UI().notify('Welcome back, ' + res.user.name + '!', 'success');
         renderProfile();
+        refreshReviewsIfVisible();
       });
     }
     go.addEventListener('click', attempt);
@@ -590,13 +649,25 @@
       }
       var me = P().me(res.doc);
       if(!me){
-        // Session no longer matches any server record (e.g. data restored
-        // from backup): drop the dead session and fall back to guest view.
-        try{ P().signOutThisDevice(); }catch(e){}
-        UI().notify('Your sign-in on this device expired. Create an account to sync again.', 'warning');
-        renderPlayerTabGuest(body);
+        // Local session but no server record: confirm a dead session before
+        // wiping (a network blip on the owner read must not nuke progress).
+        body.appendChild(statusLine('loading', '⟳ Checking your sign-in…'));
+        P().validateSession().then(function(v){
+          body.innerHTML = '';
+          if(v && v.dead){
+            try{ P().signOutThisDevice(); }catch(e){}
+            try{
+              if(global.SP_Save && typeof global.SP_Save.resetAfterWorldWipe === 'function'){
+                global.SP_Save.resetAfterWorldWipe();
+              }
+            }catch(e){}
+            UI().notify('Your sign-in on this device expired. Starting fresh!', 'warning');
+          }
+          renderPlayerTabGuest(body);
+        });
         return;
       }
+      syncWorld(res.doc, res.stale);
       if(res.stale) body.appendChild(statusLine('stale', '⚠ ' + res.error));
       var h = el('h3', '', 'My records — ' + me.name);
       body.appendChild(h);
@@ -623,6 +694,7 @@
         return;
       }
       if(res.stale) body.appendChild(statusLine('stale', '⚠ ' + res.error));
+      syncWorld(res.doc, res.stale);
       var rows = P().leaderboard(res.doc, 100);
       if(!rows.length){
         body.appendChild(statusLine('loading', 'No players have joined yet. Create an account, finish a level, and claim #1!'));

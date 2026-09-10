@@ -7,7 +7,8 @@
     "start": "node server.js",
     "dev": "node server.js",
     "test": "node test.js",
-    "test:auth": "node test-auth.js"
+    "test:auth": "node test-auth.js",
+    "test:reset": "node test-gameplay-reset.js"
   },
   "engines": {
     "node": ">=18"

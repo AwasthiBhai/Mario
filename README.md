@@ -97,9 +97,13 @@ PLAYER → GitHub Pages frontend → Node API (server/) → MantleDB → databas
 - The API (`server/server.js`, zero dependencies) owns ALL database
   configuration as host environment variables (see `server/.env.example`
   for NAMES — values live only on the backend host, never in code).
-- Reviews: `GET/POST /api/reviews` — validated, sanitized, newest first.
+- Reviews: `GET /api/reviews` (public) / `POST /api/reviews` (signed-in
+  accounts only — session verified server-side, guests get 401) —
+  validated, sanitized, newest first.
   No public delete endpoint exists.
-- Profiles: `GET /api/profiles`, `GET /api/profiles/:id`,
+- Profiles: `GET /api/profiles` (public list + world `resetVersion`, which
+  clients use to detect a world wipe and reset stale local progress),
+  `GET /api/profiles/:id`,
   `GET /api/profiles/me` (owner, secret- or session-verified),
   `POST /api/profiles` (legacy create: server mints id + edit secret),
   `PATCH /api/profiles/:id` (403 without the owner's credential),
@@ -139,7 +143,9 @@ anywhere: not in the repo, not in the browser, not in Actions secrets.
 Nothing can leak. (If the namespace is ever claimed, set `MANTLEDB_API_KEY`
 on the backend host — never in frontend code.)
 
-- **Submit:** validate → `POST /api/reviews` → backend re-validates, GETs
+- **Submit (account holders only; READ stays public):** validate → require
+  local account → `POST /api/reviews` (session/secret attached) → backend
+  re-verifies the session server-side (guest POSTs get 401), GETs
   the fresh doc, prepends, POSTs it back, verifies persistence → UI reports
   success. No redeploy, no Actions, no polling. (`js/reviews.js`:
   `SP_Reviews.submit()` resolves `ok:true` only after that confirmation.)

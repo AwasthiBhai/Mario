@@ -4,10 +4,12 @@
    The browser NEVER contacts the database directly and holds no private
    credentials — only the public backend URL (js/api-config.js).
 
-   SUBMIT FLOW (no redeploy, no Actions, no polling):
-     1. validate input → 2. POST {name,rating,text} to /api/reviews →
-     3. backend validates, prepends, writes back, verifies persistence →
-     4. resolve ok:true with the saved review.
+    SUBMIT FLOW (account holders only; READ stays public):
+      1. validate input → 2. require local account (guests rejected here,
+      no network call) → 3. POST {name,rating,text + session/secret} to
+      /api/reviews → 4. backend re-verifies the session server-side,
+      prepends, writes back, verifies persistence →
+      5. resolve ok:true with the saved review.
    READ FLOW: GET /api/reviews on every open, newest first — a genuine
    backend read every time (the localStorage cache is used ONLY when the
    backend is unreachable). Every fetch has a 12 s timeout; all failures
@@ -162,6 +164,27 @@
   }
 
   /* ---------------- Secure backend API (single source of truth) ---------------- */
+  var REVIEW_GUEST_ERROR = 'Create an account or sign in to leave a review.';
+
+  /* Account credentials for review submission (session token preferred,
+   * else the legacy device account). Null when signed out. Passwords are
+   * never touched here — only the opaque session/secret authenticators. */
+  function reviewCreds(){
+    try{
+      var P = global.SP_Profiles;
+      if(!P) return null;
+      if(typeof P.authSession === 'function'){
+        var a = P.authSession();
+        if(a && a.token) return { token: a.token };
+      }
+      if(typeof P.session === 'function'){
+        var s = P.session();
+        if(s && s.id && s.secret) return { id: s.id, secret: s.secret };
+      }
+    }catch(e){}
+    return null;
+  }
+
   function apiLoad(){
     var base = apiBase();
     if(!base) return Promise.reject(Object.assign(new Error('not configured'), { status: 404 }));
@@ -173,13 +196,31 @@
   function apiSubmit(review){
     var base = apiBase();
     if(!base) return Promise.reject(new Error('Review submissions are not configured.'));
+    // WRITE requires an account (READ stays public). Guests are rejected
+    // HERE without any network call; the backend re-verifies server-side,
+    // so a forged request can never slip through either.
+    var creds = reviewCreds();
+    if(!creds){
+      return Promise.reject(Object.assign(new Error(REVIEW_GUEST_ERROR), { guest: true }));
+    }
     var attempt = 0;
     function once(){
       attempt++;
+      var headers = { 'Content-Type': 'application/json' };
+      var payload = { name: review.name, rating: review.rating, text: review.text };
+      if(creds.token){
+        headers['Authorization'] = 'Bearer ' + creds.token;
+        headers['X-Session-Token'] = creds.token;
+        payload.sessionToken = creds.token;
+      } else {
+        headers['X-Profile-Secret'] = creds.secret;
+        payload.accountId = creds.id;
+        payload.secret = creds.secret;
+      }
       return fetchJson(base + '/api/reviews', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: review.name, rating: review.rating, text: review.text })
+        headers: headers,
+        body: JSON.stringify(payload)
       }).then(function(res){
         var saved = sanitizeOne(res && res.review ? res.review : review);
         if(!saved) throw new Error('Server did not confirm the review.');

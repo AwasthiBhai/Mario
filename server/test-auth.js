@@ -12,6 +12,7 @@ const assert = require('assert');
 const TEST_PORT = 18788;
 process.env.PORT = String(TEST_PORT);
 process.env.MANTLEDB_PROFILES_ENTRY = 'profiles-test-auth-v1';
+process.env.MANTLEDB_REVIEWS_ENTRY = 'reviews-test-auth-v1';
 process.env.AUTH_PEPPER = 'test-pepper-for-auth-suite-only';
 process.env.ALLOWED_ORIGINS = 'http://localhost:3000,https://test.github.io';
 process.env.RATE_LIMIT_MAX = '500';
@@ -251,6 +252,68 @@ async function run() {
     }
   });
 
+  // ---- REVIEW PERMISSIONS (READ public, WRITE account-only) ----
+  await t('guest GET /api/reviews allowed', async () => {
+    const r = await jget('/api/reviews');
+    assert.strictEqual(r.status, 200);
+    assert.ok(Array.isArray(r.data.reviews));
+  });
+
+  await t('guest POST /api/reviews rejected (401)', async () => {
+    const r = await jpost('/api/reviews', { name: 'Ghost', rating: 5, text: 'no account here' });
+    assert.strictEqual(r.status, 401);
+    assert.ok(/account or sign in/i.test(r.data.error || ''));
+  });
+
+  await t('invalid session POST /api/reviews rejected', async () => {
+    const badTok = await fetch(BASE + '/api/reviews', { method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, bearer('0'.repeat(64))),
+      body: JSON.stringify({ name: 'Ghost', rating: 4, text: 'bad token' }) });
+    assert.strictEqual(badTok.status, 401);
+    // Tokens in URLs must NEVER authorize (header/body only).
+    const viaQuery = await fetch(BASE + '/api/reviews?sessionToken=' + encodeURIComponent(tokenA), { method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Ghost', rating: 4, text: 'query token' }) });
+    assert.strictEqual(viaQuery.status, 401);
+    const wrongLegacy = await jpost('/api/reviews', { name: 'Ghost', rating: 4, text: 'x', accountId: idA, secret: '0'.repeat(64) });
+    assert.ok(wrongLegacy.status === 401 || wrongLegacy.status === 403);
+  });
+
+  await t('legacy-secret POST /api/reviews allowed', async () => {
+    const r = await jpost('/api/reviews', { name: 'Auth Alice', rating: 5, text: 'legacy device review', accountId: idA, secret: legacySecretA });
+    assert.strictEqual(r.status, 200);
+    assert.ok(r.data.ok && r.data.review && r.data.review.id);
+    global.__sbAuthExtra = Object.assign(global.__sbAuthExtra || {}, { legacyReviewId: r.data.review.id });
+  });
+
+  await t('session Bearer POST /api/reviews allowed, newest-first', async () => {
+    const before = await jget('/api/reviews');
+    const r = await fetch(BASE + '/api/reviews', { method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, bearer(tokenA)),
+      body: JSON.stringify({ name: 'Auth Alice', rating: 4, text: 'session review newest' }) });
+    assert.strictEqual(r.status, 200);
+    const after = await jget('/api/reviews');
+    assert.ok(after.data.reviews.length >= before.data.reviews.length);
+    assert.strictEqual(after.data.reviews[0].text, 'session review newest');
+    for (let i = 1; i < after.data.reviews.length; i++) {
+      assert.ok(after.data.reviews[i - 1].createdAt >= after.data.reviews[i].createdAt);
+    }
+    global.__sbAuthExtra = Object.assign(global.__sbAuthExtra || {}, { sessionReviewId: after.data.reviews[0].id });
+  });
+
+  await t('review validation + limits still enforced for accounts', async () => {
+    const bad = await fetch(BASE + '/api/reviews', { method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, bearer(tokenA)),
+      body: JSON.stringify({ name: '', rating: 9, text: '' }) });
+    assert.strictEqual(bad.status, 400);
+    const over = await fetch(BASE + '/api/reviews', { method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, bearer(tokenA)),
+      body: JSON.stringify({ name: 'x'.repeat(100), rating: 5, text: 'hi' }) });
+    assert.strictEqual(over.status, 400);
+    const capped = await jget('/api/reviews');
+    assert.ok(capped.data.reviews.length <= 120, 'review limit intact');
+  });
+
   // ---- RATE LIMITING (temporary, no lockout) ----
   await t('repeated failed signins are throttled, account not locked', async () => {
     CFG.authRateMax = 6;
@@ -294,14 +357,20 @@ async function run() {
     }
     const lb = await (await fetch('https://starbound-api.onrender.com/api/leaderboard?limit=5')).json();
     assert.ok(Array.isArray(lb.rows));
+    const rev = await (await fetch('https://starbound-api.onrender.com/api/reviews')).json();
+    assert.ok(Array.isArray(rev.reviews));
   });
 
-  // ---- CLEANUP: empty the isolated test entry ----
-  await t('isolated test entry cleaned, nothing left behind', async () => {
-    const entry = 'https://mantledb.sh/v2/starlit-pip-guestbook/profiles-test-auth-v1';
-    await fetch(entry, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ v: 1, resetVersion: 0, users: [] }) });
-    const v = await (await fetch(entry)).json().catch(() => null);
+  // ---- CLEANUP: empty the isolated test entries ----
+  await t('isolated test entries cleaned, nothing left behind', async () => {
+    const pentry = 'https://mantledb.sh/v2/starlit-pip-guestbook/profiles-test-auth-v1';
+    await fetch(pentry, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ v: 1, resetVersion: 0, users: [] }) });
+    const v = await (await fetch(pentry)).json().catch(() => null);
     assert.ok(v && Array.isArray(v.users) && v.users.length === 0);
+    const rentry = 'https://mantledb.sh/v2/starlit-pip-guestbook/reviews-test-auth-v1';
+    await fetch(rentry, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reviews: [] }) });
+    const rv = await (await fetch(rentry)).json().catch(() => null);
+    assert.ok(rv && Array.isArray(rv.reviews) && rv.reviews.length === 0);
   });
 
   console.log('[auth-test] ALL ' + pass + ' TESTS PASSED');
@@ -316,7 +385,11 @@ run().catch(async (e) => {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ v: 1, resetVersion: 0, users: [] }),
     });
-    console.log('[auth-test] test entry cleaned after failure');
+    await fetch('https://mantledb.sh/v2/starlit-pip-guestbook/reviews-test-auth-v1', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reviews: [] }),
+    });
+    console.log('[auth-test] test entries cleaned after failure');
   } catch (ee) {}
   try { server.close(); } catch (ee) {}
   process.exit(1);

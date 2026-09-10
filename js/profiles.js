@@ -304,7 +304,12 @@
       seen[u.id] = true;
       out.push(u);
     }
-    return { v: 1, resetVersion: 0, users: out, me: sanitizeOwnerCached(doc.me) };
+    // Preserve the server's world resetVersion (public number) so the game
+    // can detect a world wipe and reset stale local progress. Hardcoding 0
+    // here previously blinded the client to server-side resets.
+    var rv = Math.floor(Number(doc.resetVersion));
+    if(!isFinite(rv) || rv < 0 || rv > 99) rv = 0;
+    return { v: 1, resetVersion: rv, users: out, me: sanitizeOwnerCached(doc.me) };
   }
 
   /* PUBLIC projection: strips privateId/seenAt from any owner-shaped record
@@ -512,9 +517,13 @@
   function writeOutbox(arr){
     try{ if(global.localStorage) global.localStorage.setItem(OUTBOX_KEY, JSON.stringify(arr.slice(-MAX_OUTBOX))); }catch(e){}
   }
-  function queueOp(op){
+  function queueOp(op, ownerId){
     var box = readOutbox();
     op.ts = Date.now(); op.tries = 0;
+    // Tag each op with its owning account so a later sign-in as a DIFFERENT
+    // account flushes only its own ops — stale ops are dropped, never
+    // silently uploaded to someone else's (or a new) account.
+    if(ownerId) op.pid = String(ownerId);
     box.push(op);
     writeOutbox(box);
   }
@@ -586,15 +595,48 @@
     hasAccount: function(){ return !!loadSession() || authValid(loadAuth()); },
     signOutThisDevice: function(){ clearSession(); clearAuth(); },
 
-    /* Sign out: revoke the password session server-side (best-effort —
-     * offline still clears local state), then drop all local credentials.
-     * Cloud account + progress are never deleted. */
+    /* Sign out: flush pending sync under the current account first (best
+     * effort), then revoke the password session server-side, then drop all
+     * local credentials. Cloud account + progress are never deleted. */
     signOut: function(){
+      var self = this;
       var a = loadAuth();
       var done = function(){ clearSession(); clearAuth(); return { ok: true }; };
-      if(!a || !authValid(a)) return Promise.resolve(done());
-      return fetchJson('/api/auth/signout', { method: 'POST', token: a.token, body: {} })
-        .then(done, done);
+      if(!a || !authValid(a)){ clearSession(); clearAuth(); return Promise.resolve({ ok: true }); }
+      return self.flushOutbox().then(function(){
+        return fetchJson('/api/auth/signout', { method: 'POST', token: a.token, body: {} }).then(done, done);
+      }, done);
+    },
+
+    /* Definitive session check: {ok:true} when the server still recognizes
+     * this device; {ok:false, dead:true} ONLY on 401/403/404 (unknown or
+     * revoked account) — network failures resolve dead:false so a transient
+     * blip can never be mistaken for a wiped world. Never throws. */
+    validateSession: function(){
+      var a = loadAuth();
+      if(a && !authValid(a)){ clearAuth(); a = null; }
+      var s = loadSession();
+      if(!a && !s) return Promise.resolve({ ok: false, dead: false });
+      var p;
+      if(a){
+        p = fetchJson('/api/auth/session', { token: a.token });
+      } else {
+        p = fetchJson('/api/profiles/me?id=' + encodeURIComponent(s.id), { secret: s.secret });
+      }
+      return p.then(function(){ return { ok: true, dead: false }; }, function(err){
+        if(err && (err.status === 401 || err.status === 403 || err.status === 404)){
+          return { ok: false, dead: true };
+        }
+        return { ok: false, dead: false };
+      });
+    },
+
+    /* Drop offline sync state (outbox + read cache). Used when starting
+     * over: a brand-new account must never inherit another world's queue. */
+    dropSyncState: function(){
+      writeOutbox([]);
+      try{ if(global.localStorage) global.localStorage.removeItem(CACHE_KEY); }catch(e){}
+      return true;
     },
 
     /* ---- reads (always a genuine backend read; cache only on failure) -- */
@@ -617,7 +659,8 @@
       }
       return Promise.all([usersP, meP]).then(function(pair){
         var rawUsers = pair[0] && Array.isArray(pair[0].users) ? pair[0].users : [];
-        var doc = sanitizeCachedDoc({ users: rawUsers, me: pair[1] });
+        var doc = sanitizeCachedDoc({ users: rawUsers, me: pair[1],
+          resetVersion: pair[0] && pair[0].resetVersion });
         writeCache(doc);
         return { ok: true, doc: doc, stale: false, error: '' };
       }).catch(function(err){
@@ -727,6 +770,12 @@
         if(!res || !res.user || !res.sessionToken) throw new Error('Server did not confirm the profile.');
         if(res.secret) saveSession({ id: res.user.id, secret: String(res.secret).toLowerCase(), privateId: res.user.privateId });
         saveAuth({ id: res.user.id, token: String(res.sessionToken).toLowerCase(), expiresAt: Number(res.expiresAt) || 0 });
+        // A brand-new account starts with FRESH progression: drop any stale
+        // offline queue/cache and wipe local gameplay so another world's
+        // progress can never silently upload to (or unlock levels for) it.
+        try{ writeOutbox([]); }catch(e){}
+        try{ if(global.localStorage) global.localStorage.removeItem(CACHE_KEY); }catch(e){}
+        try{ if(global.SP_Save && typeof global.SP_Save.resetAfterWorldWipe === 'function') global.SP_Save.resetAfterWorldWipe(); }catch(e){}
         return { ok: true, user: sanitizeOwnerCached(res.user) };
       }).catch(function(err){
         var msg = (err && err.message && !/^Request failed/.test(err.message)) ? err.message : friendlyError(err, 'save');
@@ -839,7 +888,7 @@
         .catch(function(err){
           if(err && (err.status === 403 || err.status === 404)) return { ok: false, error: 'forbidden' };
           if(err && dropStatus(err)) return { ok: false, error: friendlyError(err, 'save') };
-          queueOp({ op: 'attempt', level: level });
+          queueOp({ op: 'attempt', level: level }, myId);
           return { ok: false, error: friendlyError(err, 'save'), queued: true };
         });
     },
@@ -866,7 +915,7 @@
         .catch(function(err){
           if(err && (err.status === 403 || err.status === 404)) return { ok: false, error: 'forbidden' };
           if(err && dropStatus(err)) return { ok: false, error: friendlyError(err, 'save') };
-          queueOp({ op: 'complete', level: level, data: { score: score, coins: coins, time: time, runId: runId } });
+          queueOp({ op: 'complete', level: level, data: { score: score, coins: coins, time: time, runId: runId } }, myId);
           return { ok: false, error: friendlyError(err, 'save'), queued: true };
         });
     },
@@ -881,7 +930,7 @@
       if((!s && !a) || !box.length) return Promise.resolve({ ok: true, flushed: 0 });
       var myId = (a && a.id) || s.id;
       var remaining = [];
-      var flushed = 0;
+      var flushed = 0, dropped = 0;
       var chain = Promise.resolve();
       function authedOpts(body){
         var o = { method: 'POST', body: body };
@@ -890,6 +939,11 @@
         return o;
       }
       box.forEach(function(item){
+        // Ops tagged with another account's id are dropped, never uploaded
+        // here (prevents cross-account contamination after account switch).
+        // Untagged legacy ops predate tagging and flush normally; the server
+        // still verifies ownership and rejects foreign writes.
+        if(item && item.pid && item.pid !== myId){ dropped++; return null; }
         chain = chain.then(function(){
           var p;
           if(item.op === 'attempt'){
@@ -911,7 +965,7 @@
       });
       return chain.then(function(){
         writeOutbox(remaining);
-        return { ok: true, flushed: flushed, pending: remaining.length };
+        return { ok: true, flushed: flushed, dropped: dropped, pending: remaining.length };
       });
     },
     outboxCount: function(){ return readOutbox().length; },

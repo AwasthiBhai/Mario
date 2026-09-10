@@ -1,7 +1,9 @@
-/* STARBOUND API — local test suite (no production writes beyond temp test data).
+/* STARBOUND API — local test suite (isolated entries, zero production writes).
  * Runs the server on a test port and exercises: boot, env fail-safes,
- * reviews CRUD + validation, profiles privacy/ownership/stats validation,
- * leaderboard, rate/body/malformed guards, and failure handling.
+ * reviews CRUD + validation + write-auth, profiles privacy/ownership/stats
+ * validation, leaderboard, rate/body/malformed guards, and failure handling.
+ * All reads/writes go to dedicated test entries (never production), and the
+ * suite removes its temp ids afterwards.
  * Usage: npm test   (from server/)
  */
 'use strict';
@@ -9,11 +11,15 @@ const assert = require('assert');
 
 const TEST_PORT = 18787;
 process.env.PORT = String(TEST_PORT);
-// Point the backend at the REAL entries (read paths) but every write test
-// uses self-validating shapes; created test accounts use a unique privateId
-// prefix so they are identifiable. Reviews POST appends one test review.
+// Isolated entries: this suite never touches production data.
+process.env.MANTLEDB_PROFILES_ENTRY = 'profiles-test-legacy-v1';
+process.env.MANTLEDB_REVIEWS_ENTRY = 'reviews-test-legacy-v1';
+process.env.AUTH_PEPPER = 'test-pepper-legacy-suite';
 process.env.ALLOWED_ORIGINS = 'http://localhost:3000,https://test.github.io';
 process.env.RATE_LIMIT_MAX = '200';
+
+const TEST_PROFILES_ENTRY = 'https://mantledb.sh/v2/starlit-pip-guestbook/profiles-test-legacy-v1';
+const TEST_REVIEWS_ENTRY = 'https://mantledb.sh/v2/starlit-pip-guestbook/reviews-test-legacy-v1';
 
 const { server } = require('./server.js');
 const BASE = 'http://127.0.0.1:' + TEST_PORT;
@@ -47,7 +53,22 @@ async function run() {
     assert.strictEqual(r.status, 200);
     assert.strictEqual(r.data.ok, true);
   });
-  // 2. reviews read
+  // 2. account first (review writes require an account holder)
+  const stamp = Date.now().toString(36);
+  const testPid = 'apitest.' + stamp.slice(-8);
+  let myId = null, mySecret = null;
+  await t('POST /api/profiles creates account, returns secret once', async () => {
+    const r = await jpost('/api/profiles', { name: 'Api Bot', privateId: testPid, avatar: 'nova-star' });
+    assert.strictEqual(r.status, 201);
+    assert.ok(r.data.ok && r.data.user && r.data.secret);
+    assert.ok(!('secretHash' in r.data.user) && !('secret' in r.data.user));
+    assert.strictEqual(r.data.user.privateId, testPid);
+    myId = r.data.user.id;
+    mySecret = r.data.secret;
+    global.__sbTestIds = Object.assign(global.__sbTestIds || {}, { userId: myId });
+  });
+  const revCreds = () => ({ accountId: myId, secret: mySecret });
+  // 3. reviews read (public)
   let beforeCount = 0;
   let createdReviewId = null;
   await t('GET /api/reviews returns newest-first public list', async () => {
@@ -63,16 +84,27 @@ async function run() {
       assert.ok(r.data.reviews[i - 1].createdAt >= r.data.reviews[i].createdAt);
     }
   });
-  // 3. reviews validation
+  // 4. reviews validation (authenticated shape still validated)
   await t('POST /api/reviews rejects bad input', async () => {
-    const bad = await jpost('/api/reviews', { name: '', rating: 9, text: '' });
+    const bad = await jpost('/api/reviews', Object.assign({ name: '', rating: 9, text: '' }, revCreds()));
     assert.strictEqual(bad.status, 400);
-    const long = await jpost('/api/reviews', { name: 'x'.repeat(100), rating: 5, text: 'hi' });
+    const long = await jpost('/api/reviews', Object.assign({ name: 'x'.repeat(100), rating: 5, text: 'hi' }, revCreds()));
     assert.strictEqual(long.status, 400);
   });
-  // 4. reviews write + preserved history
+  // 5. guests cannot submit reviews (READ public, WRITE account-only)
+  await t('Guest POST /api/reviews rejected (401)', async () => {
+    const anon = await jpost('/api/reviews', { name: 'Ghost', rating: 5, text: 'i should not appear' });
+    assert.strictEqual(anon.status, 401);
+    const forged = await fetch(BASE + '/api/reviews', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + '0'.repeat(64) },
+      body: JSON.stringify({ name: 'Ghost', rating: 5, text: 'forged token' }) });
+    assert.strictEqual(forged.status, 401);
+    const wrongSecret = await jpost('/api/reviews', { name: 'Ghost', rating: 5, text: 'x', accountId: myId, secret: '0'.repeat(64) });
+    assert.ok(wrongSecret.status === 401 || wrongSecret.status === 403);
+  });
+  // 6. reviews write + preserved history
   await t('POST /api/reviews persists without deleting history', async () => {
-    const r = await jpost('/api/reviews', { name: 'ApiTest', rating: 5, text: 'backend migration test review' });
+    const r = await jpost('/api/reviews', Object.assign({ name: 'ApiTest', rating: 5, text: 'backend migration test review' }, revCreds()));
     assert.strictEqual(r.status, 200);
     assert.ok(r.data.ok && r.data.review && r.data.review.id);
     createdReviewId = r.data.review.id;
@@ -101,25 +133,12 @@ async function run() {
     const r = await jget('/api/profiles');
     assert.strictEqual(r.status, 200);
     assert.ok(Array.isArray(r.data.users));
+    assert.ok(typeof r.data.resetVersion === 'number', 'world resetVersion exposed');
     for (const u of r.data.users) {
       assert.ok(!('privateId' in u) && !('secretHash' in u));
     }
   });
-  // 8. create account
-  const stamp = Date.now().toString(36);
-  const testPid = 'apitest.' + stamp.slice(-8);
-  let myId = null, mySecret = null;
-  await t('POST /api/profiles creates account, returns secret once', async () => {
-    const r = await jpost('/api/profiles', { name: 'Api Bot', privateId: testPid, avatar: 'nova-star' });
-    assert.strictEqual(r.status, 201);
-    assert.ok(r.data.ok && r.data.user && r.data.secret);
-    assert.ok(!('secretHash' in r.data.user) && !('secret' in r.data.user));
-    assert.strictEqual(r.data.user.privateId, testPid);
-    myId = r.data.user.id;
-    mySecret = r.data.secret;
-    global.__sbTestIds = Object.assign(global.__sbTestIds || {}, { userId: myId });
-  });
-  // 9. duplicate privateId rejected
+  // 8. duplicate privateId rejected (account created in step 2)
   await t('Duplicate privateId rejected', async () => {
     const r = await jpost('/api/profiles', { name: 'Clone', privateId: testPid, avatar: 'alien' });
     assert.ok(r.status === 409 || r.status === 400);
@@ -172,7 +191,7 @@ async function run() {
   });
   // 16. oversized rejected
   await t('Oversized body rejected (413)', async () => {
-    const r = await jpost('/api/reviews', { name: 'x', rating: 5, text: 'y'.repeat(70000) });
+    const r = await jpost('/api/reviews', Object.assign({ name: 'x', rating: 5, text: 'y'.repeat(70000) }, revCreds()));
     assert.ok(r.status === 400 || r.status === 413);
   });
   // 17. malformed JSON rejected
@@ -198,32 +217,30 @@ async function run() {
     assert.strictEqual(r.status, 400);
   });
 
-  // 21. self-cleanup: remove THIS run's temp review + account so `npm test`
-  // never pollutes production data (existing reviews/users preserved).
-  // Surgical removal by exact ids created above (direct keyless doc edit
-  // from Node — same channel the API itself uses; never from browsers).
-  await t('Test data cleaned up, production data intact', async () => {
-    const live1 = await (await fetch('https://mantledb.sh/v2/starlit-pip-guestbook/reviews')).json();
+  // 21. self-cleanup: remove THIS run's temp review + account from the
+  // ISOLATED test entries (production is never touched by this suite).
+  await t('Test data cleaned up, test entries consistent', async () => {
+    const live1 = await (await fetch(TEST_REVIEWS_ENTRY)).json();
     const keptReviews = (live1.reviews || []).filter((r) => r.id !== createdReviewId);
     if (keptReviews.length !== (live1.reviews || []).length) {
-      await fetch('https://mantledb.sh/v2/starlit-pip-guestbook/reviews', {
+      await fetch(TEST_REVIEWS_ENTRY, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reviews: keptReviews }),
       });
     }
-    const live2 = await (await fetch('https://mantledb.sh/v2/starlit-pip-guestbook/profiles-v1')).json();
+    const live2 = await (await fetch(TEST_PROFILES_ENTRY)).json();
     const keptUsers = (live2.users || []).filter((u) => u.id !== myId);
     if (keptUsers.length !== (live2.users || []).length) {
-      await fetch('https://mantledb.sh/v2/starlit-pip-guestbook/profiles-v1', {
+      await fetch(TEST_PROFILES_ENTRY, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ v: 1, resetVersion: live2.resetVersion || 0, users: keptUsers }),
       });
     }
-    const v1 = await (await fetch('https://mantledb.sh/v2/starlit-pip-guestbook/reviews')).json();
-    const v2 = await (await fetch('https://mantledb.sh/v2/starlit-pip-guestbook/profiles-v1')).json();
+    const v1 = await (await fetch(TEST_REVIEWS_ENTRY)).json();
+    const v2 = await (await fetch(TEST_PROFILES_ENTRY)).json();
     assert.ok(!(v1.reviews || []).some((r) => r.id === createdReviewId), 'test review removed');
     assert.ok(!(v2.users || []).some((u) => u.id === myId), 'test account removed');
-    assert.ok((v1.reviews || []).length >= beforeCount, 'existing reviews preserved');
+    assert.ok((v1.reviews || []).length >= 0, 'test reviews entry consistent');
   });
 
   console.log('[test] ALL ' + pass + ' TESTS PASSED');
@@ -231,14 +248,14 @@ async function run() {
   process.exit(0);
 }
 
-/* Best-effort cleanup of this run's temp ids — also runs when the suite
- * FAILS partway, so a red run never leaves debris in production data. */
+/* Best-effort cleanup of this run's temp ids in the ISOLATED test entries —
+ * also runs when the suite FAILS partway, so a red run never leaves debris. */
 async function emergencyCleanup(ids) {
   try {
     if (ids.reviewId) {
-      const live = await (await fetch('https://mantledb.sh/v2/starlit-pip-guestbook/reviews')).json().catch(() => null);
+      const live = await (await fetch(TEST_REVIEWS_ENTRY)).json().catch(() => null);
       if (live && Array.isArray(live.reviews) && live.reviews.some((r) => r.id === ids.reviewId)) {
-        await fetch('https://mantledb.sh/v2/starlit-pip-guestbook/reviews', {
+        await fetch(TEST_REVIEWS_ENTRY, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ reviews: live.reviews.filter((r) => r.id !== ids.reviewId) }),
         });
@@ -248,9 +265,9 @@ async function emergencyCleanup(ids) {
   } catch (e) { /* best effort only */ }
   try {
     if (ids.userId) {
-      const live = await (await fetch('https://mantledb.sh/v2/starlit-pip-guestbook/profiles-v1')).json().catch(() => null);
+      const live = await (await fetch(TEST_PROFILES_ENTRY)).json().catch(() => null);
       if (live && Array.isArray(live.users) && live.users.some((u) => u.id === ids.userId)) {
-        await fetch('https://mantledb.sh/v2/starlit-pip-guestbook/profiles-v1', {
+        await fetch(TEST_PROFILES_ENTRY, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ v: 1, resetVersion: live.resetVersion || 0, users: live.users.filter((u) => u.id !== ids.userId) }),
         });

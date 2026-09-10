@@ -795,6 +795,12 @@ async function handleReviewsGet(req, res, cors) {
 }
 
 async function handleReviewsPost(req, res, cors, body) {
+  // WRITE = account holders only (READ stays public). The session token
+  // resolves identity server-side; pre-password accounts authenticate with
+  // their accountId + device secret. Guests always get 401 here, no matter
+  // what body shape they send — hiding the form is UI only, this is the
+  // real enforcement.
+  await requireReviewAuthor(req, body || {});
   if (body && typeof body === 'object' && ('reviews' in body) && !('name' in body)) {
     sendJson(res, 400, { error: 'Invalid review. Send {name, rating, text}.' }, cors);
     return;
@@ -816,6 +822,32 @@ async function handleReviewsPost(req, res, cors, body) {
   sendJson(res, 200, { ok: true, review: saved }, cors);
 }
 
+/* Review authorship: returns the owning account or throws 401.
+ * Session tokens travel in headers/body only (never URLs — extractSessionToken
+ * ignores query strings, so a token pasted into a URL can never authorize).
+ * Failures share one friendly message; nothing reveals whether an id exists. */
+async function requireReviewAuthor(req, body) {
+  const denied = () => {
+    const e = new Error('Please create an account or sign in to leave a review.');
+    e.status = 401;
+    throw e;
+  };
+  const token = extractSessionToken(req, body);
+  if (token) {
+    const doc = await getProfilesDoc();
+    const hit = findSessionUser(doc, token);
+    if (!hit) denied();
+    return hit.user;
+  }
+  const id = String((body || {}).accountId || '');
+  const secret = String((body || {}).secret || (req && req.headers && req.headers['x-profile-secret']) || '');
+  if (!id || !secret) denied();
+  const doc = await getProfilesDoc();
+  const u = doc.users.find(x => x.id === id);
+  if (!u || !secretsMatch(secret, u.secretHash)) denied();
+  return u;
+}
+
 async function handleLeaderboard(req, res, cors, query) {
   const doc = await getProfilesDoc();
   const rows = rankedPublics(doc, query.get('limit'));
@@ -833,7 +865,9 @@ async function handleProfilesList(req, res, cors, query) {
     const p = publicUser(u);
     if (p) users.push(p);
   }
-  sendJson(res, 200, { users }, cors);
+  // resetVersion is public (a plain number): clients use it to detect a
+  // world wipe and reset stale local gameplay progress. No private data.
+  sendJson(res, 200, { users, resetVersion: doc.resetVersion || 0 }, cors);
 }
 
 async function handleProfileGet(req, res, cors, id) {
@@ -1320,7 +1354,13 @@ function route(req, res) {
       sendJson(res, status, { error: msg }, cors);
     }
   }).catch((e) => {
-    const status = (e && (e.status === 400 || e.status === 413)) ? e.status : 400;
+    // Handler promises are returned (not awaited) above, so an async handler
+    // rejection lands here instead of the inner catch. Preserve intentional
+    // app statuses (thrown with safe messages); collapse anything else to
+    // a generic 400 without internals.
+    const status = (e && (e.status === 400 || e.status === 401 || e.status === 403 ||
+      e.status === 404 || e.status === 409 || e.status === 413 ||
+      e.status === 429 || e.status === 502)) ? e.status : 400;
     const msg = (e && e.message) ? String(e.message).slice(0, 200) : 'Bad request.';
     sendJson(res, status, { error: msg }, cors);
   });
