@@ -3260,7 +3260,48 @@ body.show-touch .canvas-wrap:fullscreen .touch {
 
 .av-cell.sel {
   border-color: var(--gold);
+  box-shadow: 0 0 14px rgba(255, 201, 77, .4), 0 0 0 2px var(--gold) inset;
+  transform: scale(1.06);
+}
+
+.av-cell {
+  position: relative;
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+
+.av-cell .av-check {
+  display: none;
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  background: var(--gold);
+  color: #1a1200;
+  font-weight: 800;
+  font-size: .75rem;
+  line-height: 1;
+  border-radius: 999px;
+  padding: 3px 6px;
+}
+
+.av-cell.sel .av-check {
+  display: inline-block;
+}
+
+.av-cell:focus-visible,
+.av-custom-preview:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.av-custom-preview.sel {
+  border-color: var(--gold);
   box-shadow: 0 0 14px rgba(255, 201, 77, .4);
+}
+
+@media (max-width: 560px) {
+  .av-cell.sel {
+    transform: scale(1.04);
+  }
 }
 
 .av-custom-row {

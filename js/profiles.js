@@ -1,10 +1,14 @@
 /* STARBOUND — Global Profiles + Leaderboard: secure-backend client.
    ---------------------------------------------------------------------------
-   ARCHITECTURE: Frontend → {API_BASE}/api/profiles… → backend → MantleDB.
+   ARCHITECTURE: Frontend → {API_BASE}/api/profiles…|/api/auth/… → backend → MantleDB.
    The browser NEVER contacts the database directly and holds no private
    credentials — only the public backend URL (js/api-config.js) plus the
-   owner's own 256-bit edit secret (this device only, for authenticating
-   that owner's mutations).
+   owner's own credentials (this device only):
+     - legacy 256-bit edit secret (pre-password devices), and/or
+     - password-session token minted by POST /api/auth/signup|signin.
+   Passwords are sent ONLY over HTTPS to the Render API and verified ONLY
+   there (scrypt+pepper); this file never hashes, verifies, or stores
+   passwords — it only collects them from form fields and POSTs them.
 
    Every method that touches the network NEVER throws: results resolve to
    {ok:true,...} / {ok:false,error} so gameplay can never break when the
@@ -46,9 +50,12 @@
   var MAX_OUTBOX = 50;
   var FETCH_TIMEOUT_MS = 12000;
   var SESSION_KEY = 'starboundProfileSessionV1';
+  var AUTH_KEY = 'starboundAuthSessionV1';
   var CACHE_KEY = 'starboundProfilesCacheV1';
   var OUTBOX_KEY = 'starboundProfileOutboxV1';
   var RESET_VERSION = 1;
+  var MIN_PASSWORD = 8, MAX_PASSWORD = 256;
+  var SIGNIN_GENERIC = 'The sign-in details are incorrect.';
 
   function apiBase(){
     try{
@@ -168,6 +175,15 @@
     return { ok: false, error: 'Please choose a profile icon.' };
   }
 
+  /* Passwords are collected here and POSTed to the backend ONLY. They are
+   * never hashed, verified, or stored by this file (see header). */
+  function validatePassword(pw){
+    if(typeof pw !== 'string' || !pw || !pw.trim()) return { ok: false, error: 'Please choose a password.' };
+    if(pw.length < MIN_PASSWORD) return { ok: false, error: 'Password must be at least ' + MIN_PASSWORD + ' characters.' };
+    if(pw.length > MAX_PASSWORD) return { ok: false, error: 'Password must be ' + MAX_PASSWORD + ' characters or fewer.' };
+    return { ok: true, value: pw };
+  }
+
   /* ---------------- sanitizers (cache + test seams) --------------------- */
   function num(v, lo, hi, fb){
     v = Number(v);
@@ -274,6 +290,7 @@
     if(!pid || !PID_RE.test(pid)) return null;
     p.privateId = pid;
     p.seenAt = num(u.seenAt, 0, 9e15, 0);
+    p.hasPassword = !!u.hasPassword;
     return p;
   }
 
@@ -369,6 +386,10 @@
     if(typeof f !== 'function') return Promise.reject(Object.assign(new Error('Network unavailable'), { network: true }));
     var headers = { 'Content-Type': 'application/json' };
     if(opts.secret) headers['X-Profile-Secret'] = opts.secret;
+    if(opts.token){
+      headers['Authorization'] = 'Bearer ' + opts.token;
+      headers['X-Session-Token'] = opts.token;
+    }
     var p = f(base + pathname, {
       method: opts.method || 'GET',
       headers: headers,
@@ -416,7 +437,12 @@
     return !!(err && (err.network || err.status === 429 || (err.status >= 500 && err.status <= 599)));
   }
 
-  /* ---------------- session (owner identity, this device only) ----------- */
+  /* ---------------- sessions: legacy secret + password sessions --------
+     Legacy device secrets keep existing devices working. Password sessions
+     (opaque tokens from /api/auth/signup|signin) allow sign-out then
+     sign-in on ANY device and recovery of the SAME account + progress.
+     Signing out only clears local state (+ revokes the token server-side);
+     cloud data is never deleted. */
   function loadSession(){
     try{
       var raw = global.localStorage && global.localStorage.getItem(SESSION_KEY);
@@ -432,6 +458,27 @@
   }
   function clearSession(){
     try{ if(global.localStorage) global.localStorage.removeItem(SESSION_KEY); }catch(e){}
+  }
+  function loadAuth(){
+    try{
+      var raw = global.localStorage && global.localStorage.getItem(AUTH_KEY);
+      if(!raw) return null;
+      var s = JSON.parse(raw);
+      if(!s || typeof s.id !== 'string' || typeof s.token !== 'string') return null;
+      if(!/^p_[a-z0-9_]+$/i.test(s.id) || !/^[0-9a-f]{64}$/i.test(s.token)) return null;
+      return { id: s.id, token: s.token.toLowerCase(), expiresAt: Number(s.expiresAt) || 0 };
+    }catch(e){ return null; }
+  }
+  function saveAuth(s){
+    try{ if(global.localStorage) global.localStorage.setItem(AUTH_KEY, JSON.stringify(s)); }catch(e){}
+  }
+  function clearAuth(){
+    try{ if(global.localStorage) global.localStorage.removeItem(AUTH_KEY); }catch(e){}
+  }
+  function authValid(a){
+    if(!a) return false;
+    if(a.expiresAt && a.expiresAt < Date.now()) return false;
+    return true;
   }
   /* Local ownership check (test seam). Authoritative verification happens
      server-side; the client keeps this only for cached-shape tests. */
@@ -525,26 +572,49 @@
     validateName: validateName,
     validatePrivateId: validatePrivateId,
     validateAvatar: validateAvatar,
+    validatePassword: validatePassword,
+    MIN_PASSWORD: MIN_PASSWORD,
     cleanName: cleanName,
     fmtTime: function(s){
       s = Math.max(0, Math.ceil(Number(s) || 0));
       return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
     },
 
-    /* ---- session ---- */
+    /* ---- sessions (legacy device secret and/or password session) ---- */
     session: loadSession,
-    hasAccount: function(){ return !!loadSession(); },
-    signOutThisDevice: function(){ clearSession(); },
+    authSession: function(){ var a = loadAuth(); return authValid(a) ? a : null; },
+    hasAccount: function(){ return !!loadSession() || authValid(loadAuth()); },
+    signOutThisDevice: function(){ clearSession(); clearAuth(); },
+
+    /* Sign out: revoke the password session server-side (best-effort —
+     * offline still clears local state), then drop all local credentials.
+     * Cloud account + progress are never deleted. */
+    signOut: function(){
+      var a = loadAuth();
+      var done = function(){ clearSession(); clearAuth(); return { ok: true }; };
+      if(!a || !authValid(a)) return Promise.resolve(done());
+      return fetchJson('/api/auth/signout', { method: 'POST', token: a.token, body: {} })
+        .then(done, done);
+    },
 
     /* ---- reads (always a genuine backend read; cache only on failure) -- */
     load: function(){
       var session = loadSession();
+      var auth = loadAuth();
+      if(auth && !authValid(auth)){ clearAuth(); auth = null; }
       var usersP = fetchJson('/api/profiles?limit=500', {});
-      var meP = session
-        ? fetchJson('/api/profiles/me?id=' + encodeURIComponent(session.id), { secret: session.secret })
-            .then(function(r){ return (r && r.user) ? sanitizeOwnerCached(r.user) : null; })
-            .catch(function(){ return null; })
-        : Promise.resolve(null);
+      var meP;
+      if(auth){
+        meP = fetchJson('/api/auth/session', { token: auth.token })
+          .then(function(r){ return (r && r.user) ? sanitizeOwnerCached(r.user) : null; })
+          .catch(function(){ return null; });
+      } else if(session){
+        meP = fetchJson('/api/profiles/me?id=' + encodeURIComponent(session.id), { secret: session.secret })
+          .then(function(r){ return (r && r.user) ? sanitizeOwnerCached(r.user) : null; })
+          .catch(function(){ return null; });
+      } else {
+        meP = Promise.resolve(null);
+      }
       return Promise.all([usersP, meP]).then(function(pair){
         var rawUsers = pair[0] && Array.isArray(pair[0].users) ? pair[0].users : [];
         var doc = sanitizeCachedDoc({ users: rawUsers, me: pair[1] });
@@ -561,15 +631,22 @@
     },
 
     /* Owner's record (includes privateId, never secretHash). The backend
-       verified the session secret before returning it. */
+     * verified the session before returning it. */
     me: function(doc){
+      if(!doc || !doc.me) return null;
+      var a = loadAuth();
+      if(a && authValid(a) && doc.me.id === a.id) return doc.me;
       var s = loadSession();
-      if(!s || !doc || !doc.me) return null;
-      if(doc.me.id !== s.id) return null;
+      if(!s || doc.me.id !== s.id) return null;
       return doc.me;
     },
 
-    myPublicId: function(){ var s = loadSession(); return s ? s.id : null; },
+    myPublicId: function(){
+      var a = loadAuth();
+      if(a && authValid(a)) return a.id;
+      var s = loadSession();
+      return s ? s.id : null;
+    },
 
     /* Public profile of ANY player (stripped server-side). Never exposes
        private data — public entries contain none by construction. */
@@ -609,7 +686,8 @@
       return 0;
     },
 
-    /* ---- account creation (server mints id + edit secret) ---- */
+    /* ---- account creation (legacy, no password — kept for backwards
+     * compatibility; new accounts should use signUp with a password) ---- */
     createAccount: function(name, privateId, avatar){
       var vn = validateName(name);
       if(!vn.ok) return Promise.resolve({ ok: false, error: vn.error });
@@ -630,13 +708,93 @@
       });
     },
 
+    /* ---- password account creation (name + private ID + password) ----
+     * The password is POSTed over HTTPS and verified ONLY server-side;
+     * only the minted session token is stored locally. */
+    signUp: function(name, privateId, avatar, password){
+      var vn = validateName(name);
+      if(!vn.ok) return Promise.resolve({ ok: false, error: vn.error });
+      var vp = validatePrivateId(privateId);
+      if(!vp.ok) return Promise.resolve({ ok: false, error: vp.error });
+      var va = validateAvatar(avatar);
+      if(!va.ok) return Promise.resolve({ ok: false, error: va.error });
+      var vpw = validatePassword(password);
+      if(!vpw.ok) return Promise.resolve({ ok: false, error: vpw.error });
+      return fetchJson('/api/auth/signup', {
+        method: 'POST',
+        body: { name: vn.value, privateId: vp.value, avatar: va.value, password: vpw.value }
+      }).then(function(res){
+        if(!res || !res.user || !res.sessionToken) throw new Error('Server did not confirm the profile.');
+        if(res.secret) saveSession({ id: res.user.id, secret: String(res.secret).toLowerCase(), privateId: res.user.privateId });
+        saveAuth({ id: res.user.id, token: String(res.sessionToken).toLowerCase(), expiresAt: Number(res.expiresAt) || 0 });
+        return { ok: true, user: sanitizeOwnerCached(res.user) };
+      }).catch(function(err){
+        var msg = (err && err.message && !/^Request failed/.test(err.message)) ? err.message : friendlyError(err, 'save');
+        return { ok: false, error: msg };
+      });
+    },
+
+    /* ---- sign in (name + private ID + password must ALL match) ----
+     * Generic failures only: the server never reveals which field was
+     * wrong, and neither do we. */
+    signIn: function(name, privateId, password){
+      name = cleanName(name);
+      privateId = String(privateId == null ? '' : privateId).trim();
+      if(!name || !privateId || typeof password !== 'string' || !password){
+        return Promise.resolve({ ok: false, error: SIGNIN_GENERIC });
+      }
+      return fetchJson('/api/auth/signin', {
+        method: 'POST',
+        body: { name: name, privateId: privateId, password: password }
+      }).then(function(res){
+        if(!res || !res.user || !res.sessionToken) throw new Error(SIGNIN_GENERIC);
+        saveAuth({ id: res.user.id, token: String(res.sessionToken).toLowerCase(), expiresAt: Number(res.expiresAt) || 0 });
+        return { ok: true, user: sanitizeOwnerCached(res.user) };
+      }).catch(function(err){
+        if(err && (err.status === 401 || err.status === 400)) return { ok: false, error: SIGNIN_GENERIC };
+        var msg = (err && err.message && !/^Request failed/.test(err.message)) ? err.message : friendlyError(err, 'save');
+        return { ok: false, error: msg };
+      });
+    },
+
+    /* ---- set/change the account password (owner only) ----
+     * Pre-password accounts: pass only the new password (owner auth via
+     * current session). Accounts with a password: currentPassword required. */
+    setPassword: function(newPassword, currentPassword){
+      var vpw = validatePassword(newPassword);
+      if(!vpw.ok) return Promise.resolve({ ok: false, error: vpw.error });
+      var a = loadAuth();
+      if(a && !authValid(a)){ clearAuth(); a = null; }
+      var s = loadSession();
+      var id = (a && a.id) || (s && s.id);
+      if(!id) return Promise.resolve({ ok: false, error: 'No account on this device.' });
+      var body = { newPassword: vpw.value };
+      if(currentPassword !== undefined) body.currentPassword = currentPassword;
+      if(a) body.sessionToken = a.token;
+      if(s) body.secret = s.secret;
+      var opts = { method: 'POST', body: body };
+      if(a) opts.token = a.token;
+      if(s) opts.secret = s.secret;
+      return fetchJson('/api/auth/set-password/' + encodeURIComponent(id), opts)
+        .then(function(){ return { ok: true }; })
+        .catch(function(err){
+          var msg = (err && err.message && !/^Request failed/.test(err.message)) ? err.message : friendlyError(err, 'save');
+          return { ok: false, error: msg };
+        });
+    },
+
     /* ---- owner edits (name / avatar / privateId). Ownership verified
-       server-side; wrong-secret edits fail with 403 and are rejected. --- */
+       server-side from the session; forged ids fail with 403. --- */
     updateProfile: function(patch){
       var s = loadSession();
-      if(!s) return Promise.resolve({ ok: false, error: 'No account on this device.' });
+      var a = loadAuth();
+      if(a && !authValid(a)){ clearAuth(); a = null; }
+      if(!s && !a) return Promise.resolve({ ok: false, error: 'No account on this device.' });
       var session = s;
-      var body = { secret: session.secret };
+      var body = {};
+      var opts = { method: 'PATCH', body: body };
+      if(session){ body.secret = session.secret; opts.secret = session.secret; }
+      if(a){ body.sessionToken = a.token; opts.token = a.token; }
       if(patch.name !== undefined){
         var vn = validateName(patch.name);
         if(!vn.ok) return Promise.resolve({ ok: false, error: vn.error });
@@ -652,13 +810,11 @@
         if(!vp.ok) return Promise.resolve({ ok: false, error: vp.error });
         body.privateId = vp.value;
       }
-      return fetchJson('/api/profiles/' + encodeURIComponent(session.id), {
-        method: 'PATCH',
-        body: body
-      }).then(function(res){
+      var myId = (a && a.id) || (session && session.id);
+      return fetchJson('/api/profiles/' + encodeURIComponent(myId), opts).then(function(res){
         if(!res || !res.user) throw new Error('Server did not confirm the profile.');
         var user = sanitizeOwnerCached(res.user);
-        saveSession({ id: session.id, secret: session.secret, privateId: user ? user.privateId : session.privateId });
+        if(session) saveSession({ id: session.id, secret: session.secret, privateId: user ? user.privateId : session.privateId });
         return { ok: true, user: user };
       }).catch(function(err){
         var msg = (err && err.message && !/^Request failed/.test(err.message)) ? err.message : friendlyError(err, 'save');
@@ -669,14 +825,17 @@
     /* ---- gameplay sync (best-effort; game never waits on it) ------------ */
     recordAttempt: function(level){
       var s = loadSession();
-      if(!s) return Promise.resolve({ ok: false, error: 'no-account' });
-      var session = s;
+      var a = loadAuth();
+      if(a && !authValid(a)){ clearAuth(); a = null; }
+      if(!s && !a) return Promise.resolve({ ok: false, error: 'no-account' });
+      var myId = (a && a.id) || s.id;
       level = parseInt(level, 10);
       if(!(level >= 1 && level <= MAX_LEVEL)) return Promise.resolve({ ok: false, error: 'bad level' });
-      return fetchJson('/api/profiles/' + encodeURIComponent(session.id) + '/attempt', {
-        method: 'POST',
-        body: { level: level, secret: session.secret }
-      }).then(function(){ return { ok: true }; })
+      var abody = { level: level };
+      var aopts = { method: 'POST', body: abody };
+      if(s){ abody.secret = s.secret; aopts.secret = s.secret; }
+      if(a){ abody.sessionToken = a.token; aopts.token = a.token; }
+      return fetchJson('/api/profiles/' + encodeURIComponent(myId) + '/attempt', aopts).then(function(){ return { ok: true }; })
         .catch(function(err){
           if(err && (err.status === 403 || err.status === 404)) return { ok: false, error: 'forbidden' };
           if(err && dropStatus(err)) return { ok: false, error: friendlyError(err, 'save') };
@@ -687,8 +846,10 @@
 
     recordCompletion: function(level, data){
       var s = loadSession();
-      if(!s) return Promise.resolve({ ok: false, error: 'no-account' });
-      var session = s;
+      var a = loadAuth();
+      if(a && !authValid(a)){ clearAuth(); a = null; }
+      if(!s && !a) return Promise.resolve({ ok: false, error: 'no-account' });
+      var myId = (a && a.id) || s.id;
       data = data || {};
       level = parseInt(level, 10);
       var score = Number(data.score), coins = Number(data.coins), time = Number(data.time);
@@ -697,10 +858,11 @@
       if(!isFinite(coins) || coins < 0 || coins > MAX_COINS_RUN) return Promise.resolve({ ok: false, error: 'bad coins' });
       if(!isFinite(time) || time <= 0 || time > MAX_TIME_S) return Promise.resolve({ ok: false, error: 'bad time' });
       var runId = typeof data.runId === 'string' ? data.runId.slice(0, 64) : '';
-      return fetchJson('/api/profiles/' + encodeURIComponent(session.id) + '/completion', {
-        method: 'POST',
-        body: { level: level, score: Math.floor(score), coins: Math.floor(coins), time: time, runId: runId, secret: session.secret }
-      }).then(function(res){ return { ok: true, improved: !!(res && res.improved) }; })
+      var cbody = { level: level, score: Math.floor(score), coins: Math.floor(coins), time: time, runId: runId };
+      var copts = { method: 'POST', body: cbody };
+      if(s){ cbody.secret = s.secret; copts.secret = s.secret; }
+      if(a){ cbody.sessionToken = a.token; copts.token = a.token; }
+      return fetchJson('/api/profiles/' + encodeURIComponent(myId) + '/completion', copts).then(function(res){ return { ok: true, improved: !!(res && res.improved) }; })
         .catch(function(err){
           if(err && (err.status === 403 || err.status === 404)) return { ok: false, error: 'forbidden' };
           if(err && dropStatus(err)) return { ok: false, error: friendlyError(err, 'save') };
@@ -713,26 +875,30 @@
        4xx failures are dropped; network failures stay queued. */
     flushOutbox: function(){
       var s = loadSession();
+      var a = loadAuth();
+      if(a && !authValid(a)){ clearAuth(); a = null; }
       var box = readOutbox();
-      if(!s || !box.length) return Promise.resolve({ ok: true, flushed: 0 });
-      var session = s;
+      if((!s && !a) || !box.length) return Promise.resolve({ ok: true, flushed: 0 });
+      var myId = (a && a.id) || s.id;
       var remaining = [];
       var flushed = 0;
       var chain = Promise.resolve();
+      function authedOpts(body){
+        var o = { method: 'POST', body: body };
+        if(s){ body.secret = s.secret; o.secret = s.secret; }
+        if(a){ body.sessionToken = a.token; o.token = a.token; }
+        return o;
+      }
       box.forEach(function(item){
         chain = chain.then(function(){
           var p;
           if(item.op === 'attempt'){
-            p = fetchJson('/api/profiles/' + encodeURIComponent(session.id) + '/attempt', {
-              method: 'POST',
-              body: { level: item.level, secret: session.secret }
-            });
+            p = fetchJson('/api/profiles/' + encodeURIComponent(myId) + '/attempt',
+              authedOpts({ level: item.level }));
           } else if(item.op === 'complete'){
             var d = item.data || {};
-            p = fetchJson('/api/profiles/' + encodeURIComponent(session.id) + '/completion', {
-              method: 'POST',
-              body: { level: item.level, score: d.score, coins: d.coins, time: d.time, runId: d.runId, secret: session.secret }
-            });
+            p = fetchJson('/api/profiles/' + encodeURIComponent(myId) + '/completion',
+              authedOpts({ level: item.level, score: d.score, coins: d.coins, time: d.time, runId: d.runId }));
           } else {
             flushed++; // unknown op: drop
             return null;

@@ -100,11 +100,21 @@ PLAYER → GitHub Pages frontend → Node API (server/) → MantleDB → databas
 - Reviews: `GET/POST /api/reviews` — validated, sanitized, newest first.
   No public delete endpoint exists.
 - Profiles: `GET /api/profiles`, `GET /api/profiles/:id`,
-  `GET /api/profiles/me` (owner, secret-verified),
-  `POST /api/profiles` (server mints id + edit secret),
-  `PATCH /api/profiles/:id` (403 without the owner's secret),
+  `GET /api/profiles/me` (owner, secret- or session-verified),
+  `POST /api/profiles` (legacy create: server mints id + edit secret),
+  `PATCH /api/profiles/:id` (403 without the owner's credential),
   `POST /api/profiles/:id/attempt`, `POST /api/profiles/:id/completion`
   (bounds-checked: level/score/coins/time), `GET /api/leaderboard`.
+- Auth: `POST /api/auth/signup` (name + private ID + avatar + password →
+  owner record + session token), `POST /api/auth/signin` (all three must
+  match the same account; every failure is one generic 401),
+  `POST /api/auth/signout` (revokes that session),
+  `GET /api/auth/session` (validates a session token),
+  `POST /api/auth/set-password/:id` (owner-only migration for
+  pre-password accounts; current password required once one exists).
+  Passwords verify ONLY server-side (Node scrypt + `AUTH_PEPPER` server
+  secret, unique salt each); sessions are opaque 256-bit tokens stored as
+  SHA-256 with expiry. Sign-out clears local state only — cloud data stays.
 - Public responses contain ONLY public fields — `privateId`, `secretHash`
   and run ids are stripped server-side. Ownership secrets are verified with
   a timing-safe SHA-256 compare and never returned to any browser.

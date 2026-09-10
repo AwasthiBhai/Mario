@@ -32,6 +32,7 @@
     pendingAvatar: null,      // picker selection for create/edit forms
     customPreview: null,      // processed custom dataURL awaiting confirm
     editing: false,
+    authMode: 'create',       // signed-out view: 'create' | 'signin'
     noAcctModalShown: false,  // once-per-session auto popup
     offlineNotified: false,   // once-per-session sync notice
     busy: false
@@ -98,36 +99,78 @@
     return wrap;
   }
 
-  /* Avatar picker: 20 presets + custom upload with preview + confirm. */
+  /* Avatar picker: 20 presets + custom upload with preview + confirm.
+   * Single-select, state keyed by avatar ID (reselecting the same ID is a
+   * no-op visually). Selected cell gets .sel + aria-pressed + check badge;
+   * custom uploads highlight the preview card while active. Keyboard: every
+   * option is a real <button>, focus-visible ring via CSS. */
+  function avatarIdOf(v){
+    if(typeof v === 'string') return 'preset:' + v;
+    if(v && typeof v.custom === 'string') return 'custom:' + v.custom.slice(-32);
+    return '';
+  }
   function avatarPicker(root, current, onPick){
     state.pendingAvatar = current;
     state.customPreview = null;
     var wrap = el('div', 'av-pick');
     var grid = el('div', 'av-grid');
-    var mark = null;
+    grid.setAttribute('role', 'group');
+    grid.setAttribute('aria-label', 'Choose a profile icon');
+    var currentId = avatarIdOf(current);
+    var customBtn = null, customCard = null;
+    function paint(){
+      var want = avatarIdOf(state.pendingAvatar);
+      Array.from(grid.querySelectorAll('.av-cell')).forEach(function(x){
+        var on = x.getAttribute('data-av') === want;
+        x.classList.toggle('sel', on);
+        x.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+      if(customCard){
+        var cOn = want.indexOf('custom:') === 0;
+        customCard.classList.toggle('sel', cOn);
+        customCard.setAttribute('aria-pressed', cOn ? 'true' : 'false');
+      }
+    }
     function select(v){
       state.pendingAvatar = v;
-      if(mark) mark.forEach(function(b){ b.classList.remove('sel'); });
+      paint();
       onPick(v);
     }
-    mark = AV().PRESETS.map(function(p){
+    AV().PRESETS.map(function(p){
       var b = el('button', 'av-cell');
       b.type = 'button';
       b.title = p.name;
+      b.setAttribute('data-av', 'preset:' + p.id);
       b.setAttribute('aria-label', 'Use icon ' + p.name);
+      b.setAttribute('aria-pressed', ('preset:' + p.id) === currentId ? 'true' : 'false');
       b.appendChild(avatarEl(p.id, 56));
-      if(current === p.id) b.classList.add('sel');
+      var check = el('span', 'av-check', '✓');
+      check.setAttribute('aria-hidden', 'true');
+      b.appendChild(check);
+      if(('preset:' + p.id) === currentId) b.classList.add('sel');
       b.addEventListener('click', function(){
-        Array.from(grid.querySelectorAll('.av-cell')).forEach(function(x){ x.classList.remove('sel'); });
-        b.classList.add('sel');
         var prev = $('.av-custom-preview', wrap);
         if(prev) prev.remove();
+        customCard = null;
         state.customPreview = null;
         select(p.id);
       });
       grid.appendChild(b);
-      return b;
     });
+    // A saved CUSTOM avatar counts as "current": show it pre-highlighted.
+    if(currentId.indexOf('custom:') === 0 && current && current.custom){
+      customCard = el('button', 'av-custom-preview sel');
+      customCard.type = 'button';
+      customCard.setAttribute('data-av', currentId);
+      customCard.setAttribute('aria-pressed', 'true');
+      customCard.setAttribute('aria-label', 'Current custom photo (selected)');
+      customCard.appendChild(avatarEl(current, 72));
+      var cc = el('span', 'av-check', '✓');
+      cc.setAttribute('aria-hidden', 'true');
+      customCard.appendChild(cc);
+      customCard.addEventListener('click', function(){ select(current); });
+      wrap.appendChild(customCard);
+    }
     wrap.appendChild(grid);
 
     var customRow = el('div', 'av-custom-row');
@@ -151,14 +194,25 @@
         state.customPreview = res.dataUrl;
         var old = $('.av-custom-preview', wrap);
         if(old) old.remove();
+        customCard = null;
         var pv = el('div', 'av-custom-preview');
         pv.appendChild(avatarEl({ custom: res.dataUrl }, 72));
         var okBtn = el('button', 'btn btn-gold btn-sm', 'Use this photo');
         okBtn.type = 'button';
         okBtn.addEventListener('click', function(){
-          Array.from(grid.querySelectorAll('.av-cell')).forEach(function(x){ x.classList.remove('sel'); });
-          pv.remove();
-          select({ custom: state.customPreview });
+          var val = { custom: state.customPreview };
+          select(val);
+          // Persist the choice as a highlighted card (state keyed by ID).
+          pv.innerHTML = '';
+          pv.appendChild(avatarEl(val, 72));
+          var badge = el('span', 'av-check', '✓');
+          badge.setAttribute('aria-hidden', 'true');
+          pv.appendChild(badge);
+          var cap = el('small', 'muted', 'Custom photo selected');
+          pv.appendChild(cap);
+          customCard = pv;
+          pv.setAttribute('data-av', avatarIdOf(val));
+          paint();
           UI().notify('Custom photo selected. Save your profile to keep it.', 'success');
         });
         pv.appendChild(okBtn);
@@ -179,7 +233,7 @@
     if(!root) return;
     root.innerHTML = '';
     state.editing = false;
-    if(!P().hasAccount()){ renderCreate(root); return; }
+    if(!P().hasAccount()){ renderSignedOut(root); return; }
     renderOwnerLoading(root);
   }
 
@@ -196,7 +250,7 @@
       }
       var me = P().me(res.doc);
       if(!me){ // session no longer matches any server record
-        renderCreate(root);
+        renderSignedOut(root);
         return;
       }
       if(res.stale) root.appendChild(statusLine('stale', '⚠ ' + res.error));
@@ -244,24 +298,72 @@
     edit.addEventListener('click', function(){ state.editing = true; renderProfile(); });
     var lb = el('button', 'btn btn-ghost', '🏆 Leaderboard');
     lb.addEventListener('click', function(){ UI().show('leaderboard'); });
-    var out = el('button', 'btn btn-ghost btn-sm', 'Sign out on this device');
+    var out = el('button', 'btn btn-ghost btn-sm', 'Sign Out');
     out.addEventListener('click', function(){
       UI().confirmDialog({
-        title: 'Sign out on this device?',
-        message: 'Your global account stays saved. This only removes the sign-in from this device.',
-        okText: 'Sign out', cancelText: 'Stay signed in'
+        title: 'Sign out?',
+        message: 'Your global account and progress stay saved. This only removes the sign-in from this device — sign in again anytime to recover the same account.',
+        okText: 'Sign Out', cancelText: 'Stay signed in'
       }).then(function(ok){
         if(!ok) return;
-        P().signOutThisDevice();
-        UI().notify('Signed out on this device.', 'info');
-        renderProfile();
+        out.disabled = true;
+        P().signOut().then(function(){
+          UI().notify('Signed out. Your account and progress are safe.', 'info');
+          renderProfile();
+        });
       });
     });
     actions.appendChild(edit); actions.appendChild(lb); actions.appendChild(out);
     root.appendChild(actions);
+    renderPasswordCard(root, me);
     var h = el('h3', '', 'My level records');
     root.appendChild(h);
     root.appendChild(recordsBlock(me.levels || {}));
+  }
+
+  /* Password card: pre-password accounts get "Set password" (migration);
+   * password accounts get "Change password" (current required). */
+  function renderPasswordCard(root, me){
+    var card = el('div', 'card');
+    card.appendChild(el('h3', '', me.hasPassword ? 'Change password' : 'Set a password'));
+    var sub = el('p', 'muted', me.hasPassword
+      ? 'Change your sign-in password. You will stay signed in on this device.'
+      : 'Add a password so you can sign out and sign back in on any device to recover this same account and progress.');
+    card.appendChild(sub);
+    if(me.hasPassword){
+      var curLabel = el('label', 'rev-label', 'Current password');
+      var curIn = el('input', '');
+      curIn.type = 'password'; curIn.autocomplete = 'current-password';
+      curLabel.appendChild(curIn);
+      card.appendChild(curLabel);
+    }
+    var nwLabel = el('label', 'rev-label', me.hasPassword ? 'New password' : 'Password');
+    var nwIn = el('input', '');
+    nwIn.type = 'password'; nwIn.autocomplete = 'new-password';
+    nwIn.placeholder = 'At least ' + P().MIN_PASSWORD + ' characters';
+    nwLabel.appendChild(nwIn);
+    card.appendChild(nwLabel);
+    var err = el('p', 'rev-errors'); err.setAttribute('role', 'alert');
+    var okm = el('p', 'rev-ok'); okm.setAttribute('role', 'status');
+    card.appendChild(err); card.appendChild(okm);
+    var go = el('button', 'btn btn-ghost', me.hasPassword ? 'Change password' : 'Set password');
+    go.addEventListener('click', function(){
+      err.textContent = ''; okm.textContent = '';
+      var v = P().validatePassword(nwIn.value);
+      if(!v.ok){ err.textContent = v.error; return; }
+      go.disabled = true;
+      P().setPassword(nwIn.value, me.hasPassword ? curIn.value : undefined).then(function(res){
+        go.disabled = false;
+        if(!res.ok){ err.textContent = res.error; UI().notify(res.error, 'error'); return; }
+        nwIn.value = '';
+        if(me.hasPassword && curIn) curIn.value = '';
+        okm.textContent = 'Password saved. Use it to sign in on any device.';
+        UI().notify('Password saved.', 'success');
+        me.hasPassword = true;
+      });
+    });
+    card.appendChild(go);
+    root.appendChild(card);
   }
 
   function renderEdit(root, me){
@@ -311,16 +413,32 @@
     root.appendChild(card);
   }
 
-  function renderCreate(root){
+  /* Signed-out Profile: Create Account | Sign In tabs in the existing
+   * STARBOUND card style. Sign-in needs display name + private ID +
+   * password, all matching one account; failures are one generic message. */
+  function renderSignedOut(root){
     var hero = el('div', 'card prof-hero');
     hero.appendChild(avatarEl(AV().defaultId(), 96, 'prof-avatar'));
-    hero.appendChild(el('h2', 'prof-name', 'Create your account'));
-    var warn = el('p', 'prof-warn', "You haven't created your account.\nYour data will not be stored.");
-    hero.appendChild(warn);
-    var sub = el('p', 'muted', 'No account = local play on this device only. Account = persistent global statistics on every device.');
-    hero.appendChild(sub);
+    hero.appendChild(el('h2', 'prof-name', state.authMode === 'signin' ? 'Welcome back' : 'Create your account'));
+    hero.appendChild(el('p', 'prof-warn', "You haven't created your account.\nYour data will not be stored."));
+    hero.appendChild(el('p', 'muted', 'No account = local play on this device only. Account = persistent global statistics on every device.'));
     root.appendChild(hero);
+    var seg = el('div', 'lb-seg');
+    seg.setAttribute('role', 'group');
+    seg.setAttribute('aria-label', 'Account actions');
+    var bC = el('button', 'lb-seg-btn' + (state.authMode === 'create' ? ' active' : ''), '✦ Create Account');
+    var bS = el('button', 'lb-seg-btn' + (state.authMode === 'signin' ? ' active' : ''), 'Sign In');
+    bC.setAttribute('aria-pressed', String(state.authMode === 'create'));
+    bS.setAttribute('aria-pressed', String(state.authMode === 'signin'));
+    bC.addEventListener('click', function(){ state.authMode = 'create'; renderProfile(); });
+    bS.addEventListener('click', function(){ state.authMode = 'signin'; renderProfile(); });
+    seg.appendChild(bC); seg.appendChild(bS);
+    root.appendChild(seg);
+    if(state.authMode === 'signin') renderSigninForm(root);
+    else renderCreateForm(root);
+  }
 
+  function renderCreateForm(root){
     var card = el('div', 'card');
     var pickLabel = el('label', 'rev-label', 'Profile icon — choose from 20 icons or upload your own');
     card.appendChild(pickLabel);
@@ -344,17 +462,71 @@
     var pidHint = el('small', 'muted', '3–20 characters: letters, numbers, dot, underscore, hyphen. Unique across all players.');
     card.appendChild(pidLabel);
     card.appendChild(pidHint);
+    var pwLabel = el('label', 'rev-label', 'Password (for signing in on any device)');
+    var pwIn = el('input', '');
+    pwIn.type = 'password'; pwIn.autocomplete = 'new-password';
+    pwIn.placeholder = 'At least ' + P().MIN_PASSWORD + ' characters';
+    pwLabel.appendChild(pwIn);
+    card.appendChild(pwLabel);
     var err = el('p', 'rev-errors'); err.setAttribute('role', 'alert');
     card.appendChild(err);
     var go = el('button', 'btn btn-gold btn-block', '✦ Create Account ✦');
     go.addEventListener('click', function(){
       err.textContent = '';
       go.disabled = true; go.textContent = 'Creating…';
-      P().createAccount(nameIn.value, pidIn.value, chosen).then(function(res){
+      P().signUp(nameIn.value, pidIn.value, chosen, pwIn.value).then(function(res){
         go.disabled = false; go.textContent = '✦ Create Account ✦';
         if(!res.ok){ err.textContent = res.error; UI().notify(res.error, 'error'); return; }
+        pwIn.value = '';
         UI().notify('Welcome to the global leaderboard, ' + res.user.name + '!', 'success');
         renderProfile();
+      });
+    });
+    card.appendChild(go);
+    root.appendChild(card);
+  }
+
+  function renderSigninForm(root){
+    var card = el('div', 'card');
+    card.appendChild(el('h3', '', 'Sign in'));
+    card.appendChild(el('p', 'muted', 'Enter the display name, private player ID, and password for the SAME account.'));
+    var nameLabel = el('label', 'rev-label', 'Display name');
+    var nameIn = el('input', '');
+    nameIn.type = 'text'; nameIn.maxLength = P().MAX_NAME;
+    nameIn.placeholder = 'e.g. Karan';
+    nameIn.autocomplete = 'username';
+    nameLabel.appendChild(nameIn);
+    card.appendChild(nameLabel);
+    var pidLabel = el('label', 'rev-label', 'Private player ID');
+    var pidIn = el('input', '');
+    pidIn.type = 'text'; pidIn.maxLength = P().MAX_PID;
+    pidIn.placeholder = 'e.g. karan853';
+    pidIn.autocomplete = 'off'; pidIn.spellcheck = false;
+    pidLabel.appendChild(pidIn);
+    card.appendChild(pidLabel);
+    var pwLabel = el('label', 'rev-label', 'Password');
+    var pwIn = el('input', '');
+    pwIn.type = 'password'; pwIn.autocomplete = 'current-password';
+    pwLabel.appendChild(pwIn);
+    card.appendChild(pwLabel);
+    var err = el('p', 'rev-errors'); err.setAttribute('role', 'alert');
+    card.appendChild(err);
+    var go = el('button', 'btn btn-gold btn-block', 'Sign In');
+    function attempt(){
+      err.textContent = '';
+      go.disabled = true; go.textContent = 'Signing in…';
+      P().signIn(nameIn.value, pidIn.value, pwIn.value).then(function(res){
+        go.disabled = false; go.textContent = 'Sign In';
+        pwIn.value = '';
+        if(!res.ok){ err.textContent = res.error; return; }
+        UI().notify('Welcome back, ' + res.user.name + '!', 'success');
+        renderProfile();
+      });
+    }
+    go.addEventListener('click', attempt);
+    [nameIn, pidIn, pwIn].forEach(function(inp){
+      inp.addEventListener('keydown', function(e){
+        if(e.key === 'Enter'){ e.preventDefault(); attempt(); }
       });
     });
     card.appendChild(go);

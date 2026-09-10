@@ -14,7 +14,27 @@
  * Env (see .env.example for NAMES; values live ONLY on the host):
  *   PORT, MANTLEDB_BASE_URL, MANTLEDB_NAMESPACE,
  *   MANTLEDB_REVIEWS_ENTRY, MANTLEDB_PROFILES_ENTRY, MANTLEDB_API_KEY,
- *   ALLOWED_ORIGINS, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX, MAX_BODY_BYTES
+ *   ALLOWED_ORIGINS, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX, MAX_BODY_BYTES,
+ *   AUTH_PEPPER, AUTH_SESSION_TTL_MS,
+ *   AUTH_RATE_LIMIT_WINDOW_MS, AUTH_RATE_LIMIT_MAX
+ *
+ * Auth model (passwords + sessions):
+ *   - Passwords are verified ONLY here, never in the browser. Verifier is
+ *     Node built-in crypto.scrypt (memory-hard KDF, zero dependencies) over
+ *     (AUTH_PEPPER + '\\0' + password) with a unique 16-byte salt per
+ *     password. The raw MantleDB document is publicly readable by design
+ *     (unclaimed namespace), so the pepper — a high-entropy server-side
+ *     secret that never leaves this host — is what makes offline guessing
+ *     infeasible even if someone fetches the raw document directly.
+ *     Argon2id would need a native dependency; scrypt is the strongest
+ *     password KDF available in this zero-dependency Node runtime.
+ *   - Sessions are opaque 256-bit random tokens. Only SHA-256(token) is
+ *     stored (per user, bounded, with expiry); the raw token is returned
+ *     once over HTTPS and never again. The server resolves identity FROM
+ *     the token and never trusts a client-supplied id alone.
+ *   - Legacy device secrets (secretHash) keep working so existing accounts
+ *     and devices never break; new password sessions are accepted alongside
+ *     them on every owner endpoint.
  */
 'use strict';
 
@@ -55,6 +75,14 @@ const CFG = {
   rateMax: parseInt(process.env.RATE_LIMIT_MAX, 10) || 120,
   maxBody: parseInt(process.env.MAX_BODY_BYTES, 10) || 65536,
   fetchTimeoutMs: 12000,
+  // Auth-only secrets/config. AUTH_PEPPER is a high-entropy random string
+  // set on the backend host (see .env.example for the NAME only). It is
+  // mixed into every password hash and never stored in the database,
+  // never sent to browsers, never logged.
+  authPepper: process.env.AUTH_PEPPER || '',
+  sessionTtlMs: parseInt(process.env.AUTH_SESSION_TTL_MS, 10) || 60 * 24 * 60 * 60 * 1000,
+  authRateWindowMs: parseInt(process.env.AUTH_RATE_LIMIT_WINDOW_MS, 10) || 10 * 60 * 1000,
+  authRateMax: parseInt(process.env.AUTH_RATE_LIMIT_MAX, 10) || 30,
 };
 
 function mantleHeaders(json) {
@@ -88,16 +116,23 @@ const CUSTOM_AVATAR_RE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
 const RESET_VERSION = 1;
 
 /* ---------------- small utils ---------------- */
-function sendJson(res, status, obj, corsHeaders) {
+function sendJson(res, status, obj, corsHeaders, extraHeaders) {
   const body = JSON.stringify(obj);
   const h = Object.assign({
     'Content-Type': 'application/json; charset=utf-8',
     'Content-Length': Buffer.byteLength(body),
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'no-referrer',
-  }, corsHeaders || {});
+    'X-Frame-Options': 'DENY',
+  }, corsHeaders || {}, extraHeaders || {});
   res.writeHead(status, h);
   res.end(body);
+}
+
+/* Authenticated responses must never be cached anywhere (no session data,
+ * owner records or tokens in shared caches). */
+function noStoreHeaders() {
+  return { 'Cache-Control': 'no-store, no-cache', 'Pragma': 'no-cache' };
 }
 
 function clientIp(req) {
@@ -167,6 +202,30 @@ function bucketFor(method, pathname) {
   return 'write';
 }
 
+/* Stricter, separate limiter for authentication endpoints (signin / signup /
+ * set-password). Temporary throttling only: sliding window per IP, never a
+ * permanent account lockout (lockouts would let attackers deny service to
+ * legitimate players). Generic 429 when exceeded — remaining attempts are
+ * never revealed. */
+const authRateBuckets = new Map();
+function authRateLimited(ip) {
+  const now = Date.now();
+  const key = String(ip || 'unknown').slice(0, 64);
+  let b = authRateBuckets.get(key);
+  if (!b || now >= b.reset) {
+    b = { count: 0, reset: now + CFG.authRateWindowMs };
+    authRateBuckets.set(key, b);
+  }
+  b.count += 1;
+  if (authRateBuckets.size > 5000 && Math.random() < 0.01) {
+    for (const [k, v] of authRateBuckets) if (now >= v.reset) authRateBuckets.delete(k);
+  }
+  return b.count > CFG.authRateMax;
+}
+function resetAuthLimits() {
+  authRateBuckets.clear();
+}
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let bytes = 0;
@@ -201,7 +260,7 @@ function readBody(req) {
 
 async function mantleGet(url) {
   const ctl = new AbortController();
-  const t = setTimeout(() => { try { ctl.abort(); } catch (e) {} }, CFG.fetchTimeoutMs);
+  const t = setTimeout(() => { try { ctl.abort(); } catch (e) { } }, CFG.fetchTimeoutMs);
   try {
     const r = await fetch(url, { method: 'GET', headers: mantleHeaders(false), signal: ctl.signal });
     const txt = await r.text();
@@ -227,7 +286,7 @@ async function mantleGet(url) {
 
 async function mantlePost(url, doc) {
   const ctl = new AbortController();
-  const t = setTimeout(() => { try { ctl.abort(); } catch (e) {} }, CFG.fetchTimeoutMs);
+  const t = setTimeout(() => { try { ctl.abort(); } catch (e) { } }, CFG.fetchTimeoutMs);
   try {
     const r = await fetch(url, {
       method: 'POST', headers: mantleHeaders(true),
@@ -258,12 +317,12 @@ let reviewsChain = Promise.resolve();
 let profilesChain = Promise.resolve();
 function withReviewsLock(fn) {
   const p = reviewsChain.then(fn, fn);
-  reviewsChain = p.catch(() => {});
+  reviewsChain = p.catch(() => { });
   return p;
 }
 function withProfilesLock(fn) {
   const p = profilesChain.then(fn, fn);
-  profilesChain = p.catch(() => {});
+  profilesChain = p.catch(() => { });
   return p;
 }
 
@@ -316,6 +375,184 @@ function randHex(nBytes) {
 }
 function uid(prefix) {
   return (prefix || 'r_') + Date.now().toString(36) + '_' + randHex(9);
+}
+
+/* ---------------- passwords (scrypt + server pepper, zero dependencies) -- */
+const PW_MIN_LEN = 8, PW_MAX_LEN = 256;
+const SCRYPT_N = 16384, SCRYPT_R = 8, SCRYPT_P = 1, SCRYPT_LEN = 64;
+const MAX_SESSIONS_PER_USER = 10;
+const SESSION_TOKEN_RE = /^[0-9a-f]{64}$/i;
+const SIGNIN_GENERIC_ERROR = 'The sign-in details are incorrect.';
+
+function validatePasswordInput(pw) {
+  if (typeof pw !== 'string') return { ok: false, error: 'Please choose a password.' };
+  if (!pw || !pw.trim()) return { ok: false, error: 'Please choose a password.' };
+  if (pw.length < PW_MIN_LEN) {
+    return { ok: false, error: 'Password must be at least ' + PW_MIN_LEN + ' characters.' };
+  }
+  if (pw.length > PW_MAX_LEN) {
+    return { ok: false, error: 'Password must be ' + PW_MAX_LEN + ' characters or fewer.' };
+  }
+  return { ok: true, value: pw };
+}
+
+function scryptAsync(password, salt, N, r, p, len) {
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(password, salt, len, { N, r, p }, (err, derived) => {
+      if (err) reject(err);
+      else resolve(derived);
+    });
+  });
+}
+
+/* Stored format (versioned, params embedded for future upgrades):
+ *   scrypt$N=16384,r=8,p=1,len=64$<saltHex16B>$<hashHex64B>
+ * The pepper is mixed into the KDF input and lives ONLY as AUTH_PEPPER on
+ * the backend host — never in the DB, never in code, never logged. */
+async function hashPassword(password) {
+  const salt = crypto.randomBytes(16);
+  const input = String(CFG.authPepper || '') + '\0' + String(password);
+  const derived = await scryptAsync(input, salt, SCRYPT_N, SCRYPT_R, SCRYPT_P, SCRYPT_LEN);
+  return 'scrypt$N=' + SCRYPT_N + ',r=' + SCRYPT_R + ',p=' + SCRYPT_P + ',len=' + SCRYPT_LEN +
+    '$' + salt.toString('hex') + '$' + derived.toString('hex');
+}
+
+function parsePasswordHash(stored) {
+  if (typeof stored !== 'string') return null;
+  const m = stored.match(/^scrypt\$N=(\d+),r=(\d+),p=(\d+),len=(\d+)\$([0-9a-f]+)\$([0-9a-f]+)$/i);
+  if (!m) return null;
+  const N = parseInt(m[1], 10), r = parseInt(m[2], 10), p = parseInt(m[3], 10), len = parseInt(m[4], 10);
+  if (N !== SCRYPT_N || r !== SCRYPT_R || p !== SCRYPT_P || len !== SCRYPT_LEN) return null;
+  if (m[5].length !== 32 || m[6].length !== SCRYPT_LEN * 2) return null;
+  return { salt: Buffer.from(m[5], 'hex'), hash: Buffer.from(m[6], 'hex') };
+}
+
+async function verifyPassword(password, stored) {
+  try {
+    const parts = parsePasswordHash(stored);
+    if (!parts) return false;
+    const input = String(CFG.authPepper || '') + '\0' + String(password);
+    const derived = await scryptAsync(input, parts.salt, SCRYPT_N, SCRYPT_R, SCRYPT_P, SCRYPT_LEN);
+    return derived.length === parts.hash.length && crypto.timingSafeEqual(derived, parts.hash);
+  } catch (e) { return false; }
+}
+
+/* Dummy verification of equal cost, run when the account does not exist (or
+ * the display name does not match) so failures take the same time and do
+ * not reveal whether the private ID exists. */
+const DUMMY_SALT = Buffer.alloc(16, 0x5a);
+async function dummyPasswordVerify() {
+  try {
+    await scryptAsync('dummy\0invalid', DUMMY_SALT, SCRYPT_N, SCRYPT_R, SCRYPT_P, SCRYPT_LEN);
+  } catch (e) { /* timing only */ }
+  return false;
+}
+
+/* ---------------- sessions (opaque random tokens, hashed at rest) -------- */
+function extractSessionToken(req, body) {
+  const h = (req && req.headers) || {};
+  let t = '';
+  const auth = h.authorization || h.Authorization;
+  if (typeof auth === 'string') {
+    const m = auth.match(/^Bearer\s+([A-Za-z0-9+/=_-]+)\s*$/);
+    if (m) t = m[1];
+  }
+  if (!t && typeof h['x-session-token'] === 'string') t = h['x-session-token'];
+  if (!t && body && typeof body.sessionToken === 'string') t = body.sessionToken;
+  t = String(t || '').trim();
+  if (!SESSION_TOKEN_RE.test(t)) return '';
+  return t.toLowerCase();
+}
+
+function pruneSessions(user, now) {
+  now = now || Date.now();
+  if (!Array.isArray(user.sessions)) user.sessions = [];
+  user.sessions = user.sessions.filter(s =>
+    s && typeof s.th === 'string' && /^[0-9a-f]{64}$/i.test(s.th) &&
+    typeof s.expiresAt === 'number' && s.expiresAt > now);
+  if (user.sessions.length > MAX_SESSIONS_PER_USER) {
+    user.sessions.sort((a, b) => a.createdAt - b.createdAt);
+    user.sessions = user.sessions.slice(-MAX_SESSIONS_PER_USER);
+  }
+  return user.sessions;
+}
+
+function mintSession(user) {
+  const token = randHex(32);
+  const now = Date.now();
+  pruneSessions(user, now);
+  user.sessions.push({ th: sha256hex(token.toLowerCase()), createdAt: now, expiresAt: now + CFG.sessionTtlMs });
+  pruneSessions(user, now);
+  user.updatedAt = now;
+  user.seenAt = now;
+  return { token: token.toLowerCase(), expiresAt: now + CFG.sessionTtlMs };
+}
+
+function findSessionUser(doc, token) {
+  if (!token || !SESSION_TOKEN_RE.test(token)) return null;
+  const th = sha256hex(String(token).toLowerCase());
+  const now = Date.now();
+  let thBuf = null;
+  try { thBuf = Buffer.from(th, 'hex'); } catch (e) { return null; }
+  for (const u of (doc ? doc.users : [])) {
+    if (!Array.isArray(u.sessions)) continue;
+    for (const s of u.sessions) {
+      if (!s || typeof s.th !== 'string') continue;
+      if (typeof s.expiresAt === 'number' && s.expiresAt <= now) continue;
+      let cand = null;
+      try { cand = Buffer.from(String(s.th).toLowerCase(), 'hex'); } catch (e) { continue; }
+      if (cand.length !== thBuf.length) continue;
+      let match = false;
+      try { match = crypto.timingSafeEqual(cand, thBuf); } catch (e) { match = false; }
+      if (match) return { user: u, session: s };
+    }
+  }
+  return null;
+}
+
+function revokeSession(user, token) {
+  if (!Array.isArray(user.sessions)) return false;
+  const th = sha256hex(String(token).toLowerCase());
+  const before = user.sessions.length;
+  user.sessions = user.sessions.filter(s => !s || String(s.th || '').toLowerCase() !== th);
+  return user.sessions.length !== before;
+}
+
+/* Resolve the OWNER for a private mutation on path id `id`.
+ * The server determines identity FROM the session token when one is
+ * presented (a forged id can never authenticate as someone else); the
+ * legacy device secret path keeps working for existing devices.
+ * Throws {status} on failure; returns {user, via}. */
+function resolveOwner(doc, id, req, body) {
+  const token = extractSessionToken(req, body);
+  if (token) {
+    const hit = findSessionUser(doc, token);
+    if (!hit) {
+      const e = new Error('Not signed in. Please sign in again.');
+      e.status = 401;
+      throw e;
+    }
+    if (hit.user.id !== id) {
+      const e = new Error('This device is not signed in as that player.');
+      e.status = 403;
+      throw e;
+    }
+    return { user: hit.user, via: 'session' };
+  }
+  const secret = String((body || {}).secret || (req && req.headers && req.headers['x-profile-secret']) || '');
+  if (!secret) {
+    const e = new Error('Missing profile credentials.');
+    e.status = 401;
+    throw e;
+  }
+  const u = doc.users.find(x => x.id === id);
+  if (!u) { const e = new Error('Account not found on the server.'); e.status = 404; throw e; }
+  if (!secretsMatch(secret, u.secretHash)) {
+    const e = new Error('This device is not signed in as that player.');
+    e.status = 403;
+    throw e;
+  }
+  return { user: u, via: 'legacy' };
 }
 
 /* ---- reviews ---- */
@@ -413,12 +650,35 @@ function sanitizeUser(u) {
   const runs = Array.isArray(u.runs)
     ? u.runs.filter(r => typeof r === 'string' && r.length <= 64).slice(-MAX_RUNS)
     : [];
+  // Password verifier (scrypt+pepper, see hashPassword). Preserved verbatim
+  // when well-formed; NEVER returned by publicUser/ownerUser (only a
+  // hasPassword boolean is ever exposed to the owner).
+  let passwordHash = '';
+  if (typeof u.passwordHash === 'string' && u.passwordHash.length <= 500) {
+    if (parsePasswordHash(u.passwordHash)) passwordHash = u.passwordHash;
+  }
+  // Active session token hashes (SHA-256 of the opaque token, never the
+  // token itself). Bounded + expiry-pruned; stripped from all responses.
+  let sessions = [];
+  if (Array.isArray(u.sessions)) {
+    const now = Date.now();
+    for (const s of u.sessions) {
+      if (sessions.length >= MAX_SESSIONS_PER_USER) break;
+      if (!s || typeof s.th !== 'string' || !/^[0-9a-f]{64}$/i.test(s.th)) continue;
+      const createdAt = num(s.createdAt, 1, 9e15, 0);
+      const expiresAt = num(s.expiresAt, 1, 9e15, 0);
+      if (!createdAt || !expiresAt || expiresAt <= now) continue;
+      sessions.push({ th: String(s.th).toLowerCase(), createdAt, expiresAt });
+    }
+  }
   return {
     id,
     privateId: pid,
     name,
     avatar: sanitizeAvatar(u.avatar, 'nova-star'),
     secretHash: /^[0-9a-f]{64}$/i.test(String(u.secretHash || '')) ? String(u.secretHash).toLowerCase() : '',
+    passwordHash,
+    sessions,
     createdAt: num(u.createdAt, 1, 9e15, Date.now()),
     updatedAt: num(u.updatedAt, 1, 9e15, Date.now()),
     seenAt: num(u.seenAt, 0, 9e15, 0),
@@ -443,7 +703,8 @@ function sanitizeDoc(doc) {
   if (!isFinite(rv) || rv < 0 || rv > 99) rv = 0;
   return { v: 1, resetVersion: rv, users: out };
 }
-/* PUBLIC shape ONLY: strips privateId, secretHash and runIds. */
+/* PUBLIC shape ONLY: strips privateId, secretHash, passwordHash, sessions
+ * and runIds. */
 function publicUser(u) {
   u = sanitizeUser(u);
   if (!u) return null;
@@ -456,7 +717,9 @@ function publicUser(u) {
     levels: u.levels,
   };
 }
-/* Owner shape: everything the owner's own devices need, NEVER secretHash. */
+/* Owner shape: everything the owner's own devices need, NEVER secretHash,
+ * passwordHash or sessions — only a hasPassword flag so the UI knows
+ * whether to offer "set password" or "change password". */
 function ownerUser(u) {
   u = sanitizeUser(u);
   if (!u) return null;
@@ -464,6 +727,7 @@ function ownerUser(u) {
     id: u.id, privateId: u.privateId, name: u.name, avatar: u.avatar,
     createdAt: u.createdAt, updatedAt: u.updatedAt, seenAt: u.seenAt,
     totalCoins: u.totalCoins, levels: u.levels,
+    hasPassword: !!u.passwordHash,
   };
 }
 function compareRanked(a, b) {
@@ -579,17 +843,29 @@ async function handleProfileGet(req, res, cors, id) {
   sendJson(res, 200, { user: publicUser(found) }, cors);
 }
 
-async function handleProfileMe(req, res, cors, query) {
-  const id = String(query.get('id') || '');
-  const secret = String(req.headers['x-profile-secret'] || query.get('secret') || '');
-  if (!id || !secret) { sendJson(res, 401, { error: 'Missing profile credentials.' }, cors); return; }
+async function handleProfileMe(req, res, cors, query, body) {
+  const id = String(query.get('id') || (body && body.id) || '');
+  // New session tokens: headers/body only, never URLs. Legacy device
+  // secrets keep the old query fallback for backwards compatibility.
+  const token = extractSessionToken(req, body);
+  const secret = String(req.headers['x-profile-secret'] || (body && body.secret) || query.get('secret') || '');
+  if (!id || (!token && !secret)) { sendJson(res, 401, { error: 'Missing profile credentials.' }, cors, noStoreHeaders()); return; }
   const doc = await getProfilesDoc();
-  const found = doc.users.find(u => u.id === id);
-  if (!found || !secretsMatch(secret, found.secretHash)) {
-    sendJson(res, found ? 403 : 404, { error: found ? 'This device is not signed in as that player.' : 'Profile not found.' }, cors);
+  if (token) {
+    const hit = findSessionUser(doc, token);
+    if (!hit || hit.user.id !== id) {
+      sendJson(res, hit ? 403 : 401, { error: hit ? 'This device is not signed in as that player.' : 'Not signed in. Please sign in again.' }, cors, noStoreHeaders());
+      return;
+    }
+    sendJson(res, 200, { user: ownerUser(hit.user) }, cors, noStoreHeaders());
     return;
   }
-  sendJson(res, 200, { user: ownerUser(found) }, cors);
+  const found = doc.users.find(u => u.id === id);
+  if (!found || !secretsMatch(secret, found.secretHash)) {
+    sendJson(res, found ? 403 : 404, { error: found ? 'This device is not signed in as that player.' : 'Profile not found.' }, cors, noStoreHeaders());
+    return;
+  }
+  sendJson(res, 200, { user: ownerUser(found) }, cors, noStoreHeaders());
 }
 
 async function handleProfileCreate(req, res, cors, body) {
@@ -638,8 +914,9 @@ async function handleProfileCreate(req, res, cors, body) {
 }
 
 async function handleProfilePatch(req, res, cors, id, body) {
-  const secret = String((body || {}).secret || req.headers['x-profile-secret'] || '');
-  if (!secret) { sendJson(res, 401, { error: 'Missing profile credentials.' }, cors); return; }
+  const hasSessionToken = !!extractSessionToken(req, body);
+  const hasLegacySecret = !!String((body || {}).secret || req.headers['x-profile-secret'] || '');
+  if (!hasSessionToken && !hasLegacySecret) { sendJson(res, 401, { error: 'Missing profile credentials.' }, cors, noStoreHeaders()); return; }
   const patch = {};
   if ((body || {}).name !== undefined) {
     const vn = validateNameInput(body.name);
@@ -660,13 +937,7 @@ async function handleProfilePatch(req, res, cors, id, body) {
   try {
     const updated = await withProfilesLock(async () => {
       const doc = await getProfilesDoc();
-      const u = doc.users.find(x => x.id === id);
-      if (!u) { const e = new Error('Account not found on the server.'); e.status = 404; throw e; }
-      if (!secretsMatch(secret, u.secretHash)) {
-        const e = new Error('This device is not signed in as that player.');
-        e.status = 403;
-        throw e;
-      }
+      const { user: u } = resolveOwner(doc, id, req, body);
       if (wantPid) {
         for (const o of doc.users) {
           if (o.id !== u.id && o.privateId.toLowerCase() === pidVal.toLowerCase()) {
@@ -686,7 +957,7 @@ async function handleProfilePatch(req, res, cors, id, body) {
     });
     sendJson(res, 200, { ok: true, user: ownerUser(updated) }, cors);
   } catch (e) {
-    if (e && (e.status === 403 || e.status === 404 || e.status === 409)) {
+    if (e && (e.status === 401 || e.status === 403 || e.status === 404 || e.status === 409)) {
       sendJson(res, e.status, { error: e.message }, cors);
       return;
     }
@@ -716,27 +987,22 @@ function validateGameplay(body, kind) {
 }
 
 async function handleAttempt(req, res, cors, id, body) {
-  const secret = String((body || {}).secret || req.headers['x-profile-secret'] || '');
-  if (!secret) { sendJson(res, 401, { error: 'Missing profile credentials.' }, cors); return; }
+  const hasSessionToken = !!extractSessionToken(req, body);
+  const hasLegacySecret = !!String((body || {}).secret || req.headers['x-profile-secret'] || '');
+  if (!hasSessionToken && !hasLegacySecret) { sendJson(res, 401, { error: 'Missing profile credentials.' }, cors); return; }
   const lvl = parseInt((body || {}).level, 10);
   const v = validateGameplay({ level: isNaN(lvl) ? (body || {}).level : lvl }, 'attempt');
   if (!v.ok) { sendJson(res, 400, { error: v.error }, cors); return; }
   try {
     await withProfilesLock(async () => {
       const doc = await getProfilesDoc();
-      const u = doc.users.find(x => x.id === id);
-      if (!u) { const e = new Error('Account not found on the server.'); e.status = 404; throw e; }
-      if (!secretsMatch(secret, u.secretHash)) {
-        const e = new Error('This device is not signed in as that player.');
-        e.status = 403;
-        throw e;
-      }
+      const { user: u } = resolveOwner(doc, id, req, body);
       applyAttempt(u, v.level);
       await mantlePost(profilesUrl(), doc);
     });
     sendJson(res, 200, { ok: true }, cors);
   } catch (e) {
-    if (e && (e.status === 403 || e.status === 404)) {
+    if (e && (e.status === 401 || e.status === 403 || e.status === 404)) {
       sendJson(res, e.status, { error: e.message }, cors);
       return;
     }
@@ -745,20 +1011,15 @@ async function handleAttempt(req, res, cors, id, body) {
 }
 
 async function handleCompletion(req, res, cors, id, body) {
-  const secret = String((body || {}).secret || req.headers['x-profile-secret'] || '');
-  if (!secret) { sendJson(res, 401, { error: 'Missing profile credentials.' }, cors); return; }
+  const hasSessionToken = !!extractSessionToken(req, body);
+  const hasLegacySecret = !!String((body || {}).secret || req.headers['x-profile-secret'] || '');
+  if (!hasSessionToken && !hasLegacySecret) { sendJson(res, 401, { error: 'Missing profile credentials.' }, cors); return; }
   const v = validateGameplay(body || {}, 'completion');
   if (!v.ok) { sendJson(res, 400, { error: v.error }, cors); return; }
   try {
     const improved = await withProfilesLock(async () => {
       const doc = await getProfilesDoc();
-      const u = doc.users.find(x => x.id === id);
-      if (!u) { const e = new Error('Account not found on the server.'); e.status = 404; throw e; }
-      if (!secretsMatch(secret, u.secretHash)) {
-        const e = new Error('This device is not signed in as that player.');
-        e.status = 403;
-        throw e;
-      }
+      const { user: u } = resolveOwner(doc, id, req, body);
       const r = applyCompletion(u, v.level, {
         score: (body || {}).score, coins: (body || {}).coins,
         time: (body || {}).time, runId: (body || {}).runId,
@@ -768,8 +1029,205 @@ async function handleCompletion(req, res, cors, id, body) {
     });
     sendJson(res, 200, { ok: true, improved: !!improved }, cors);
   } catch (e) {
-    if (e && (e.status === 403 || e.status === 404)) {
+    if (e && (e.status === 401 || e.status === 403 || e.status === 404)) {
       sendJson(res, e.status, { error: e.message }, cors);
+      return;
+    }
+    throw e;
+  }
+}
+
+/* ---------------- authentication (password + sessions) -------------- */
+/* Sign-up: display name + private ID + avatar + password. Private ID
+ * uniqueness is case-insensitive. Returns the owner record plus BOTH a
+ * legacy device secret (backwards compatible with existing clients) and a
+ * fresh session token. The password hash itself is never returned. */
+async function handleAuthSignup(req, res, cors, body) {
+  if (authRateLimited(clientIp(req))) {
+    sendJson(res, 429, { error: 'Too many requests. Please wait a moment and try again.' }, cors, noStoreHeaders());
+    return;
+  }
+  const vn = validateNameInput((body || {}).name);
+  if (!vn.ok) { sendJson(res, 400, { error: vn.error }, cors, noStoreHeaders()); return; }
+  const vp = validatePrivateIdInput((body || {}).privateId);
+  if (!vp.ok) { sendJson(res, 400, { error: vp.error }, cors, noStoreHeaders()); return; }
+  const va = validateAvatarInput((body || {}).avatar);
+  if (!va.ok) { sendJson(res, 400, { error: va.error }, cors, noStoreHeaders()); return; }
+  const vpw = validatePasswordInput((body || {}).password);
+  if (!vpw.ok) { sendJson(res, 400, { error: vpw.error }, cors, noStoreHeaders()); return; }
+  let pwHash = '';
+  try {
+    pwHash = await hashPassword(vpw.value);
+  } catch (e) {
+    sendJson(res, 500, { error: 'Something went wrong. Please try again.' }, cors, noStoreHeaders());
+    return;
+  }
+  const secret = randHex(32);
+  const rec = {
+    id: 'p_' + Date.now().toString(36) + '_' + randHex(6),
+    privateId: vp.value, name: vn.value, avatar: va.value,
+    secretHash: sha256hex(secret),
+    passwordHash: pwHash,
+    sessions: [],
+    createdAt: Date.now(), updatedAt: Date.now(), seenAt: Date.now(),
+    totalCoins: 0, levels: {}, runs: [],
+  };
+  try {
+    const created = await withProfilesLock(async () => {
+      const doc = await getProfilesDoc();
+      if (doc.users.length >= MAX_USERS) {
+        const e = new Error('Profile storage is full right now. Please try again later.');
+        e.status = 413;
+        throw e;
+      }
+      for (const u of doc.users) {
+        if (u.privateId.toLowerCase() === vp.value.toLowerCase()) {
+          const e = new Error('That player ID is already taken. Please choose another.');
+          e.status = 409;
+          throw e;
+        }
+      }
+      const clean = sanitizeUser(rec);
+      if (!clean) { const e = new Error('Invalid account data.'); e.status = 400; throw e; }
+      doc.users.push(clean);
+      const stored = doc.users.find(x => x.id === clean.id);
+      const sess = mintSession(stored);
+      await mantlePost(profilesUrl(), doc);
+      return { rec: stored, sessionToken: sess.token, expiresAt: sess.expiresAt };
+    });
+    sendJson(res, 201, {
+      ok: true, user: ownerUser(created.rec),
+      secret, sessionToken: created.sessionToken, expiresAt: created.expiresAt,
+    }, cors, noStoreHeaders());
+  } catch (e) {
+    if (e && (e.status === 409 || e.status === 413 || e.status === 400)) {
+      sendJson(res, e.status, { error: e.message }, cors, noStoreHeaders());
+      return;
+    }
+    throw e;
+  }
+}
+
+/* Sign-in: display name + private ID + password must ALL match the SAME
+ * account. Every failure returns the SAME generic 401 so callers learn
+ * nothing about which field was wrong or whether the account exists. */
+async function handleAuthSignin(req, res, cors, body) {
+  if (authRateLimited(clientIp(req))) {
+    sendJson(res, 429, { error: 'Too many requests. Please wait a moment and try again.' }, cors, noStoreHeaders());
+    return;
+  }
+  const name = cleanName((body || {}).name, MAX_NAME + 10);
+  const pid = String((body || {}).privateId == null ? '' : (body || {}).privateId).trim();
+  const pw = (body || {}).password;
+  if (!name || !pid || typeof pw !== 'string' || !pw) {
+    await dummyPasswordVerify();
+    sendJson(res, 401, { error: SIGNIN_GENERIC_ERROR }, cors, noStoreHeaders());
+    return;
+  }
+  try {
+    const minted = await withProfilesLock(async () => {
+      const doc = await getProfilesDoc();
+      const found = doc.users.find(u => u.privateId.toLowerCase() === pid.toLowerCase());
+      if (!found) { await dummyPasswordVerify(); return null; }
+      if (String(found.name || '').trim().toLowerCase() !== String(name).trim().toLowerCase()) {
+        await dummyPasswordVerify();
+        return null;
+      }
+      if (!found.passwordHash) { await dummyPasswordVerify(); return null; }
+      const ok = await verifyPassword(pw, found.passwordHash);
+      if (!ok) return null;
+      const sess = mintSession(found);
+      await mantlePost(profilesUrl(), doc);
+      return { user: sanitizeUser(found), sessionToken: sess.token, expiresAt: sess.expiresAt };
+    });
+    if (!minted) {
+      sendJson(res, 401, { error: SIGNIN_GENERIC_ERROR }, cors, noStoreHeaders());
+      return;
+    }
+    sendJson(res, 200, {
+      ok: true, user: ownerUser(minted.user),
+      sessionToken: minted.sessionToken, expiresAt: minted.expiresAt,
+    }, cors, noStoreHeaders());
+  } catch (e) {
+    throw e;
+  }
+}
+
+/* Sign-out: revokes the presenting session token server-side. Idempotent
+ * per token: unknown/expired tokens get 401 (nothing to revoke). */
+async function handleAuthSignout(req, res, cors, body) {
+  const token = extractSessionToken(req, body);
+  if (!token) { sendJson(res, 401, { error: 'Not signed in. Please sign in again.' }, cors, noStoreHeaders()); return; }
+  try {
+    const revoked = await withProfilesLock(async () => {
+      const doc = await getProfilesDoc();
+      const hit = findSessionUser(doc, token);
+      if (!hit) return false;
+      revokeSession(hit.user, token);
+      hit.user.seenAt = Date.now();
+      await mantlePost(profilesUrl(), doc);
+      return true;
+    });
+    if (!revoked) {
+      sendJson(res, 401, { error: 'Not signed in. Please sign in again.' }, cors, noStoreHeaders());
+      return;
+    }
+    sendJson(res, 200, { ok: true }, cors, noStoreHeaders());
+  } catch (e) {
+    throw e;
+  }
+}
+
+/* Session check: validates the presenting token and returns the owner
+ * record. Tokens travel in headers/body only, never URLs. */
+async function handleAuthSession(req, res, cors, body) {
+  const token = extractSessionToken(req, body);
+  if (!token) { sendJson(res, 401, { error: 'Not signed in. Please sign in again.' }, cors, noStoreHeaders()); return; }
+  const doc = await getProfilesDoc();
+  const hit = findSessionUser(doc, token);
+  if (!hit) {
+    sendJson(res, 401, { error: 'Not signed in. Please sign in again.' }, cors, noStoreHeaders());
+    return;
+  }
+  sendJson(res, 200, { ok: true, user: ownerUser(hit.user) }, cors, noStoreHeaders());
+}
+
+/* Set/change password for the OWNER only (migration path for pre-password
+ * accounts). Auth: valid session token OR legacy device secret for the
+ * same account id. If the account already has a password, the current
+ * password must also verify. Never returns hashes or passwords. */
+async function handleAuthSetPassword(req, res, cors, id, body) {
+  if (authRateLimited(clientIp(req))) {
+    sendJson(res, 429, { error: 'Too many requests. Please wait a moment and try again.' }, cors, noStoreHeaders());
+    return;
+  }
+  if (!/^p_[a-z0-9_]+$/i.test(String(id || '')) || String(id).length > 64) {
+    sendJson(res, 400, { error: 'Invalid profile id.' }, cors, noStoreHeaders());
+    return;
+  }
+  const vpw = validatePasswordInput((body || {}).newPassword);
+  if (!vpw.ok) { sendJson(res, 400, { error: vpw.error }, cors, noStoreHeaders()); return; }
+  try {
+    await withProfilesLock(async () => {
+      const doc = await getProfilesDoc();
+      const { user: u } = resolveOwner(doc, id, req, body);
+      if (u.passwordHash) {
+        const cur = (body || {}).currentPassword;
+        if (typeof cur !== 'string' || !cur || !(await verifyPassword(cur, u.passwordHash))) {
+          const e = new Error('Current password is incorrect.');
+          e.status = 401;
+          throw e;
+        }
+      }
+      u.passwordHash = await hashPassword(vpw.value);
+      u.updatedAt = Date.now();
+      u.seenAt = Date.now();
+      await mantlePost(profilesUrl(), doc);
+    });
+    sendJson(res, 200, { ok: true, hasPassword: true }, cors, noStoreHeaders());
+  } catch (e) {
+    if (e && (e.status === 400 || e.status === 401 || e.status === 403 || e.status === 404)) {
+      sendJson(res, e.status, { error: e.message }, cors, noStoreHeaders());
       return;
     }
     throw e;
@@ -786,7 +1244,7 @@ function route(req, res) {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, Object.assign({
       'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type,X-Profile-Secret',
+      'Access-Control-Allow-Headers': 'Content-Type,X-Profile-Secret,Authorization,X-Session-Token',
       'Access-Control-Max-Age': '600',
       'Vary': 'Origin',
     }, (origin && isOriginAllowed(origin)) ? { 'Access-Control-Allow-Origin': origin } : {}));
@@ -816,16 +1274,25 @@ function route(req, res) {
   bodyP.then(async (body) => {
     try {
       if (method === 'GET' && pathname === '/') {
-        sendJson(res, 200, { ok: true, service: 'starbound-api', endpoints: ['/api/health', '/api/reviews', '/api/leaderboard', '/api/profiles'] }, cors);
+        sendJson(res, 200, { ok: true, service: 'starbound-api', endpoints: ['/api/health', '/api/reviews', '/api/leaderboard', '/api/profiles', '/api/auth/signup', '/api/auth/signin', '/api/auth/signout', '/api/auth/session'] }, cors);
         return;
       }
       if (method === 'GET' && pathname === '/api/health') return handleHealth(req, res, cors);
       if (method === 'GET' && pathname === '/api/reviews') return handleReviewsGet(req, res, cors);
       if (method === 'POST' && pathname === '/api/reviews') return handleReviewsPost(req, res, cors, body);
+      if (method === 'POST' && pathname === '/api/auth/signup') return handleAuthSignup(req, res, cors, body);
+      if (method === 'POST' && pathname === '/api/auth/signin') return handleAuthSignin(req, res, cors, body);
+      if (method === 'POST' && pathname === '/api/auth/signout') return handleAuthSignout(req, res, cors, body);
+      if (method === 'GET' && pathname === '/api/auth/session') return handleAuthSession(req, res, cors, body);
       if (method === 'GET' && pathname === '/api/leaderboard') return handleLeaderboard(req, res, cors, url.searchParams);
       if (method === 'GET' && pathname === '/api/profiles') return handleProfilesList(req, res, cors, url.searchParams);
-      if (method === 'GET' && pathname === '/api/profiles/me') return handleProfileMe(req, res, cors, url.searchParams);
+      if (method === 'GET' && pathname === '/api/profiles/me') return handleProfileMe(req, res, cors, url.searchParams, body);
       if (method === 'POST' && pathname === '/api/profiles') return handleProfileCreate(req, res, cors, body);
+      let setM = pathname.match(/^\/api\/auth\/set-password\/([^/]+)$/);
+      if (setM && method === 'POST') {
+        const setId = decodeURIComponent(setM[1]);
+        return handleAuthSetPassword(req, res, cors, setId, body);
+      }
       let m = pathname.match(/^\/api\/profiles\/([^/]+)(\/(attempt|completion))?$/);
       if (m) {
         const id = decodeURIComponent(m[1]);
@@ -849,7 +1316,7 @@ function route(req, res) {
       try {
         // eslint-disable-next-line no-console
         console.error('[api]', method, pathname, '->', status);
-      } catch (ee) {}
+      } catch (ee) { }
       sendJson(res, status, { error: msg }, cors);
     }
   }).catch((e) => {
@@ -876,4 +1343,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { server, CFG };
+module.exports = { server, CFG, resetAuthLimits };
