@@ -792,6 +792,13 @@
   var api = {
     renderProfile: renderProfile,
     renderLeaderboard: renderLeaderboard,
+    /* Open the Profile view on the Create Account tab (used by the guest
+     * review-submit popup). Reuses the existing account flow — no second
+     * system. */
+    showCreateAccount: function(){
+      state.authMode = 'create';
+      try{ UI().show('profile'); }catch(e){}
+    },
     onLevelStart: onLevelStart,
     onLevelComplete: onLevelComplete,
     needAccount: needAccount,

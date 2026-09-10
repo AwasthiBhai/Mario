@@ -574,12 +574,23 @@
       const form=$('#revForm');
       if(form) form.addEventListener('submit',e=>{
         e.preventDefault();
-        // WRITE requires an account (defense in depth: reviews.js also
-        // rejects guests, and the backend enforces it authoritatively).
-        let canReview=false;
-        try{ canReview=!!(window.SP_Profiles&&SP_Profiles.hasAccount&&SP_Profiles.hasAccount()); }catch(_){}
+        // The form stays fully usable for guests (name/stars/text/submit
+        // are never disabled). Submission requires an account: guests get
+        // the Create Account popup (draft kept in place, nothing is sent),
+        // signed-in players submit normally. Backend auth is the enforcer.
+        let signedIn=false;
+        try{ signedIn=!!(window.SP_Profiles&&SP_Profiles.hasAccount&&SP_Profiles.hasAccount()); }catch(_){}
+        if(!signedIn){
+          this.confirmDialog({title:'Create Account to Submit Review',message:'You need a STARBOUND account to submit a review.',okText:'Create Account',cancelText:'Not now'}).then(ok=>{
+            if(!ok) return;
+            try{
+              if(window.SP_ProfileUI&&typeof SP_ProfileUI.showCreateAccount==='function') SP_ProfileUI.showCreateAccount();
+              else this.show('profile');
+            }catch(_){ try{ this.show('profile'); }catch(__){} }
+          });
+          return;
+        }
         const err=$('#revErrors'), ok=$('#revOk');
-        if(!canReview){ if(err) err.textContent='Create an account or sign in to leave a review.'; SP_Audio.sfx('hurt'); return; }
         if(err) err.textContent=''; if(ok) ok.textContent='';
         const btn=form.querySelector('button[type="submit"]');
         const name=$('#revName').value, text=$('#revText').value;
@@ -609,30 +620,9 @@
     _stars(n){
       let s=''; for(let i=1;i<=5;i++) s+=i<=n?'★':'☆'; return s;
     },
-    /* WRITE requires a signed-in account; READ stays public. The form is
-       disabled for guests here for UX, but the REAL enforcement is
-       server-side (guest POST /api/reviews → 401). */
-    gateReviewForm(){
-      const form=$('#revForm'); if(!form) return;
-      let can=false;
-      try{ can=!!(window.SP_Profiles&&SP_Profiles.hasAccount&&SP_Profiles.hasAccount()); }catch(_){}
-      const name=$('#revName'), text=$('#revText'), btn=form.querySelector('button[type="submit"]');
-      const stars=Array.from(document.querySelectorAll('#starPick button'));
-      [name,text,btn].forEach(n=>{ if(n) n.disabled=!can; });
-      stars.forEach(b=>{ b.disabled=!can; });
-      let note=$('#revAuthNote');
-      if(!can){
-        if(!note){
-          note=document.createElement('p'); note.id='revAuthNote'; note.className='muted center';
-          note.textContent='Create an account or sign in to leave a review.';
-          form.parentNode.insertBefore(note,form);
-        }
-      } else if(note){ note.remove(); }
-    },
     renderReviews(){
       const sum=$('#revSummary'), list=$('#revList'), status=$('#revStatus');
       if(!sum||!list) return;
-      this.gateReviewForm();
       if(status){ status.className='rev-status loading'; status.textContent='⟳ Loading global reviews…'; }
       const retry=$('#revRetry'); if(retry) retry.classList.add('hidden');
       sum.innerHTML='<div class="rev-avg"><strong>…</strong><span class="rev-stars">☆☆☆☆☆</span><span class="muted">Loading…</span></div><div class="rev-dist"></div>';
