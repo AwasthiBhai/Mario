@@ -1,20 +1,18 @@
-/* STARBOUND — Reviews: GLOBAL shared backend, zero secrets.
+/* STARBOUND — Reviews: GLOBAL backend API client, zero secrets.
    ---------------------------------------------------------------------------
-   SINGLE SOURCE OF TRUTH: one shared backend document —
-     {BACKEND_BASE}/{BACKEND_NAMESPACE}/{BACKEND_ENTRY}  →  {"reviews":[...]}
-   (default: MantleDB namespace "starlit-pip-guestbook", UNCLAIMED, so every
-   operation is keyless — no credential exists, none can leak. Verified:
-   keyless POST creates/overwrites with HTTP 200 {"success":true}, keyless
-   GET reads, immediate read-after-write consistency, malformed JSON rejected
-   with 400, CORS preflight passes for the GitHub Pages origin.)
+   ARCHITECTURE: Frontend → {API_BASE}/api/reviews → backend → MantleDB.
+   The browser NEVER contacts the database directly and holds no private
+   credentials — only the public backend URL (js/api-config.js).
 
    SUBMIT FLOW (no redeploy, no Actions, no polling):
-     1. validate input → 2. GET fresh doc → 3. prepend review → 4. POST doc →
-     5. backend confirms (HTTP 200 + success) → 6. resolve ok:true.
-   READ FLOW: GET the doc on every open, newest first — a genuine backend
-   read every time (the localStorage cache is used ONLY when the backend is
-   unreachable). Every fetch has a 12 s timeout; all failures resolve to a
-   friendly error — load()/submit() NEVER throw, so the game can never break.
+     1. validate input → 2. POST {name,rating,text} to /api/reviews →
+     3. backend validates, prepends, writes back, verifies persistence →
+     4. resolve ok:true with the saved review.
+   READ FLOW: GET /api/reviews on every open, newest first — a genuine
+   backend read every time (the localStorage cache is used ONLY when the
+   backend is unreachable). Every fetch has a 12 s timeout; all failures
+   resolve to a friendly error — load()/submit() NEVER throw, so the game
+   can never break.
 
    OPTIONAL STRICT PATH — Supabase (used automatically when configured):
    server timestamps, RLS SELECT+INSERT only (see supabase-reviews.sql).
@@ -32,6 +30,16 @@
 
   function cfg(){
     return global.SP_ReviewsConfig || {};
+  }
+
+  function apiBase(){
+    try{
+      if(global.SP_ApiConfig && typeof global.SP_ApiConfig.getBase === 'function'){
+        var b = global.SP_ApiConfig.getBase();
+        if(typeof b === 'string' && b) return b.replace(/\/$/, '');
+      }
+    }catch(e){}
+    return '';
   }
 
   function uid(){
@@ -75,7 +83,9 @@
         timer = setTimeout(function(){ try{ controller.abort(); }catch(e){} }, FETCH_TIMEOUT_MS);
       }
     }catch(e){ controller = null; }
-    var p = global.fetch(url, {
+    var f = global.fetch;
+    if(typeof f !== 'function') return Promise.reject(Object.assign(new Error('Network unavailable'), { network: true }));
+    var p = f(url, {
       method: opts.method || 'GET',
       headers: opts.headers || {},
       body: opts.body,
@@ -89,6 +99,8 @@
         if(!res.ok){
           var err = new Error('Request failed (' + res.status + ')');
           err.status = res.status; err.data = data;
+          var msg = data && data.error ? String(data.error) : '';
+          if(msg) err.message = msg;
           throw err;
         }
         return data;
@@ -112,6 +124,7 @@
     if(err.status === 404 && what === 'load') return 'Unable to load reviews. Please try again.';
     if(err.status >= 500 && err.status <= 599) return 'The review server had a hiccup. Please try again.';
     if(err.name === 'AbortError' || (err.cause && err.cause.name === 'AbortError')) return 'The review server took too long. Please try again.';
+    if(err.message && !/^Request failed/.test(err.message)) return err.message;
     return 'Could not ' + (what === 'load' ? 'load reviews' : 'save your review') + ' right now. Please try again.';
   }
 
@@ -148,50 +161,30 @@
     });
   }
 
-  /* ---------------- Direct shared backend (single source of truth) ---------------- */
-  function store(){
-    var c = cfg();
-    if(!c.BACKEND_BASE || !c.BACKEND_NAMESPACE || !c.BACKEND_ENTRY) return null;
-    return { url: String(c.BACKEND_BASE).replace(/\/$/, '') + '/' +
-      encodeURIComponent(c.BACKEND_NAMESPACE) + '/' + encodeURIComponent(c.BACKEND_ENTRY) };
-  }
-  function storeLoad(){
-    var s = store();
-    if(!s) return Promise.reject(Object.assign(new Error('not configured'), { status: 404 }));
-    return fetchJson(s.url, {}).then(function(doc){
-      if(doc && doc.error) throw Object.assign(new Error('backend error'), { status: 500 });
+  /* ---------------- Secure backend API (single source of truth) ---------------- */
+  function apiLoad(){
+    var base = apiBase();
+    if(!base) return Promise.reject(Object.assign(new Error('not configured'), { status: 404 }));
+    return fetchJson(base + '/api/reviews', {}).then(function(doc){
       var arr = doc && Array.isArray(doc.reviews) ? doc.reviews : [];
-      return sanitizeList(arr);
+      return sanitizeList(arr).slice(0, MAX_SHARED);
     });
   }
-  function storeWrite(list){
-    var s = store();
-    return fetchJson(s.url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reviews: list })
-    }).then(function(ack){
-      if(!ack || ack.success !== true) throw new Error('Server did not confirm the review.');
-      return true;
-    });
-  }
-  function storeSubmit(review){
-    if(!store()) return Promise.reject(new Error('Review submissions are not configured.'));
+  function apiSubmit(review){
+    var base = apiBase();
+    if(!base) return Promise.reject(new Error('Review submissions are not configured.'));
     var attempt = 0;
     function once(){
       attempt++;
-      return storeLoad().then(function(current){
-        if(current.some(function(r){ return r.id === review.id; })) return review; // already persisted
-        var next = [review].concat(current).slice(0, MAX_SHARED);
-        return storeWrite(next).then(function(){ return review; });
+      return fetchJson(base + '/api/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: review.name, rating: review.rating, text: review.text })
+      }).then(function(res){
+        var saved = sanitizeOne(res && res.review ? res.review : review);
+        if(!saved) throw new Error('Server did not confirm the review.');
+        return saved;
       }).catch(function(err){
-        if(err && err.status === 413 && attempt === 1){
-          // Doc hit the size cap: trim harder and retry once.
-          return storeLoad().then(function(current){
-            var next = [review].concat(current).slice(0, 60);
-            return storeWrite(next).then(function(){ return review; });
-          });
-        }
         if(attempt < MAX_ATTEMPTS && err && (err.network || err.status === 429 ||
             (err.status >= 500 && err.status <= 599))){
           return new Promise(function(res){ setTimeout(res, 500 * attempt); }).then(once);
@@ -228,9 +221,9 @@
     MAX_NAME: MAX_NAME,
     MAX_TEXT: MAX_TEXT,
 
-    /* Active path: 'supabase' | 'shared' */
+    /* Active path: 'supabase' | 'api' */
     backend: function(){
-      return supaBase() ? 'supabase' : 'shared';
+      return supaBase() ? 'supabase' : 'api';
     },
 
     validate: function(name, rating, text){
@@ -250,7 +243,7 @@
        time. Never throws: resolves { ok, reviews, stale, error }. */
     load: function(){
       var self = this;
-      var p = supaBase() ? supaLoad() : storeLoad();
+      var p = supaBase() ? supaLoad() : apiLoad();
       return p.then(function(list){
         writeCache(list);
         self._cache = list;
@@ -279,7 +272,7 @@
         createdAt: Date.now()
       };
       var self = this;
-      var p = supaBase() ? supaSubmit(review) : storeSubmit(review);
+      var p = supaBase() ? supaSubmit(review) : apiSubmit(review);
       return p.then(function(saved){
         var keep = self._cache || readCache().reviews || [];
         var next = [saved].concat(keep.filter(function(r){ return r.id !== saved.id; })).slice(0, MAX_SHARED);
@@ -287,7 +280,9 @@
         writeCache(next);
         return { ok: true, review: saved };
       }).catch(function(err){
-        return { ok: false, errors: (err && err.network) ? friendlyError(err, 'save') : ((err && err.message) || friendlyError(err, 'save')) };
+        var msg = (err && err.network) ? friendlyError(err, 'save')
+          : ((err && err.message) || friendlyError(err, 'save'));
+        return { ok: false, errors: msg };
       });
     },
 

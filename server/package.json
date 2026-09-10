@@ -1,0 +1,16 @@
+{
+  "name": "starbound-api",
+  "version": "1.0.0",
+  "description": "Secure backend API for STARBOUND (GitHub Pages frontend -> Node API -> MantleDB). Zero dependencies.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}

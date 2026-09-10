@@ -51,7 +51,8 @@ There is no build. The repository root **is** the website:
 | `js/intro.js`   | "BundLal Studios Presents" cinematic |
 | `js/ui.js`      | Navigation, HUD, level select, reviews, settings |
 | `js/save.js`    | localStorage saves                   |
-| `js/reviews-config.js` | Shared-backend endpoints for global reviews (zero secrets) |
+| `js/api-config.js` | Public backend URL only (localhost ↔ production, zero secrets) |
+| `js/reviews-config.js` | Optional Supabase strict-path keys only (empty by default) |
 | `js/reviews.js` | Global shared reviews (`SP_Reviews`, async load/submit) |
 | `js/input.js`   | Keyboard (remappable) + touch + gamepad |
 | `favicon.svg`   | Favicon                              |
@@ -84,22 +85,58 @@ Notes:
 - Leaving a level / pausing to menus: music OFF/ducked
 - Browsers block autoplay: music starts after the first click/tap (intro button)
 
-## Reviews (global, shared — zero secrets)
+## Backend API (secure: frontend → API → MantleDB)
+
+The browser NEVER talks to the database directly and holds NO private
+credentials — only the public backend URL (`js/api-config.js`).
+
+```
+PLAYER → GitHub Pages frontend → Node API (server/) → MantleDB → database
+```
+
+- The API (`server/server.js`, zero dependencies) owns ALL database
+  configuration as host environment variables (see `server/.env.example`
+  for NAMES — values live only on the backend host, never in code).
+- Reviews: `GET/POST /api/reviews` — validated, sanitized, newest first.
+  No public delete endpoint exists.
+- Profiles: `GET /api/profiles`, `GET /api/profiles/:id`,
+  `GET /api/profiles/me` (owner, secret-verified),
+  `POST /api/profiles` (server mints id + edit secret),
+  `PATCH /api/profiles/:id` (403 without the owner's secret),
+  `POST /api/profiles/:id/attempt`, `POST /api/profiles/:id/completion`
+  (bounds-checked: level/score/coins/time), `GET /api/leaderboard`.
+- Public responses contain ONLY public fields — `privateId`, `secretHash`
+  and run ids are stripped server-side. Ownership secrets are verified with
+  a timing-safe SHA-256 compare and never returned to any browser.
+- Protections: body-size limits, per-IP rate limiting, strict CORS
+  (Pages origin + localhost), friendly JSON errors (no stacks/secrets).
+- If the API is unreachable the game keeps working: cached reads, an
+  offline outbox with safe retry, and guest play are all preserved.
+
+Local dev (Windows, no admin): `cd server` → `npm install` → `npm run dev`
+(API on `http://localhost:8787`, auto-used by the frontend on localhost).
+Production: deploy `server/` to Render/Koyeb/Glitch (free, no domain —
+see `server/README.md`), then set `PROD_API_BASE` in `js/api-config.js`
+to the live URL. `npm test` (in `server/`) runs the 21-check API suite.
+
+## Reviews (global, shared — zero secrets in the browser)
 
 One authoritative source: a single shared backend document
 `{"reviews":[...]}` (MantleDB namespace `starlit-pip-guestbook`, entry
-`reviews`). The namespace is UNCLAIMED, so all access is keyless — no
-credential exists anywhere: not in the repo, not in the browser, not in
-Actions secrets. Nothing can leak.
+`reviews`), read and written ONLY through the backend API above. The
+namespace is UNCLAIMED, so all access is keyless — no credential exists
+anywhere: not in the repo, not in the browser, not in Actions secrets.
+Nothing can leak. (If the namespace is ever claimed, set `MANTLEDB_API_KEY`
+on the backend host — never in frontend code.)
 
-- **Submit:** validate → GET fresh doc → prepend → POST → backend confirms
-  `HTTP 200 {"success":true}` → UI reports success. No redeploy, no Actions,
-  no polling. (`js/reviews.js`: `SP_Reviews.submit()` resolves `ok:true`
-  only after that confirmation.)
-- **Read:** every Reviews open performs a genuine backend GET (newest
-  first); stats come from that live data. Verified backend behavior:
-  keyless POST creates/overwrites, immediate read-after-write consistency,
-  malformed JSON rejected (400), CORS preflight passes for the Pages origin.
+- **Submit:** validate → `POST /api/reviews` → backend re-validates, GETs
+  the fresh doc, prepends, POSTs it back, verifies persistence → UI reports
+  success. No redeploy, no Actions, no polling. (`js/reviews.js`:
+  `SP_Reviews.submit()` resolves `ok:true` only after that confirmation.)
+- **Read:** every Reviews open performs a genuine `GET /api/reviews`
+  (newest first); stats come from that live data. Verified behavior:
+  malformed JSON rejected (400), oversized bodies rejected (413),
+  rate-limited abuse rejected (429), CORS restricted to the Pages origin.
 - `localStorage` holds **only** a read cache of the last fetched list
   (used solely when the backend is unreachable) plus read-only pre-global
   "legacy" reviews shown separately — never the source of truth.
@@ -109,11 +146,13 @@ Actions secrets. Nothing can leak.
   button for shared reviews.
 - **Honest limits** (inherent to any anonymous public guestbook): spam or
   deletion cannot be cryptographically prevented without user accounts.
-  Mitigations: strict validation, bounded doc size, and a daily secret-free
-  [backup workflow](.github/workflows/reviews-backup.yml) committing
-  `data/reviews-backup.json` on change — see its RESTORE RUNBOOK header.
-  If writes ever return 401 (namespace claimed by someone else): rename the
-  namespace in `js/reviews-config.js`, redeploy, restore from backup.
+  Mitigations: strict validation on BOTH frontend and backend, bounded doc
+  size, no delete button in the UI, no delete endpoint in the API, and a
+  daily secret-free [backup workflow](.github/workflows/reviews-backup.yml)
+  committing `data/reviews-backup.json` on change — see its RESTORE RUNBOOK
+  header. If the namespace is ever claimed by someone else: set
+  `MANTLEDB_API_KEY` on the backend host (writes keep working, browsers
+  still see nothing secret).
 - **Optional strict path:** Supabase (Postgres, server timestamps). Create a
   free project, run [`supabase-reviews.sql`](supabase-reviews.sql), paste the
   Project URL + `anon` key into `js/reviews-config.js` — the code switches

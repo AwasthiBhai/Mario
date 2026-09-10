@@ -1,43 +1,29 @@
-/* STARBOUND — Global Profiles + Leaderboard: shared-database client.
+/* STARBOUND — Global Profiles + Leaderboard: secure-backend client.
    ---------------------------------------------------------------------------
-   SINGLE SOURCE OF TRUTH: one shared backend document —
-     {BACKEND_BASE}/{BACKEND_NAMESPACE}/{BACKEND_ENTRY}  →  {"v":1,"users":[...]}
-   (default: MantleDB namespace "starlit-pip-guestbook" — the SAME database the
-   Reviews system uses — entry "profiles-v1", i.e. a new table, not a new DB.
-   UNCLAIMED namespace ⇒ keyless, zero secrets. Verified backend behavior:
-   keyless POST creates/overwrites with HTTP 200 {"success":true}, keyless GET
-   reads, immediate read-after-write consistency, DELETE removes an entry,
-   CORS preflight passes for the GitHub Pages origin.)
+   ARCHITECTURE: Frontend → {API_BASE}/api/profiles… → backend → MantleDB.
+   The browser NEVER contacts the database directly and holds no private
+   credentials — only the public backend URL (js/api-config.js) plus the
+   owner's own 256-bit edit secret (this device only, for authenticating
+   that owner's mutations).
 
    Every method that touches the network NEVER throws: results resolve to
    {ok:true,...} / {ok:false,error} so gameplay can never break when the
    backend is unreachable. localStorage holds ONLY the owner's session, a
    read cache, and an offline outbox — never the source of truth.
 
-   STORED USER RECORD:
-     { id,            // public id, e.g. "p_m31x_9f3ka2b7qz" (safe for URLs)
-       privateId,     // owner-only handle, e.g. "karan853" (unique, a/A same)
-       name,          // public display name
-       avatar,        // preset id string OR {custom:"data:image/jpeg;base64,..."}
-       secretHash,    // SHA-256 hex of the owner's edit secret (never secret)
-       createdAt, updatedAt, seenAt,
-       totalCoins,    // lifetime coins across completed runs (server-added Δ)
-       levels,        // sparse: {"1":{s:best score,c:best coins,a:attempts,t:best secs}}
-       runs }         // bounded ring of recent runIds (completion idempotency)
-
-   PRIVACY CONTRACT: product code must ONLY expose other players through
-   publicUser(), which strips privateId/secretHash/runs. The raw document is
-   never rendered for anyone except the owner viewing their own record.
+   PRIVACY CONTRACT: public endpoints return ONLY public fields
+   (id, name, avatar, totals, per-level bests). privateId / secretHash /
+   runIds are stripped SERVER-side — this client never sees another
+   player's private data at all (there is nothing left to filter here).
 
    IDENTITY: the 256-bit edit secret lives ONLY in the owner's localStorage
-   session. All honest clients verify sha256(secret) === secretHash before
-   mutating that record, so a player can only edit THEIR OWN profile/stats.
-   (Honest limit, same class as Reviews: a keyless store cannot stop forged
-   raw HTTP; validation + gating + daily backups are the mitigation.)
+   session and is sent back ONLY to authenticate that owner's own writes.
+   The backend verifies sha256(secret) === stored secretHash (timing-safe)
+   before ANY mutation and never returns the hash to any browser.
 
-   MERGE RULES (recordCompletion): score/coins max-wins, attempts += Δ,
-   best-time min-wins, lifetime coins += run Δ once per runId. A worse score
-   or slower time NEVER overwrites a better record.
+   MERGE RULES (server-side recordCompletion): score/coins max-wins,
+   attempts += Δ, best-time min-wins, lifetime coins += run Δ once per runId.
+   A worse score or slower time NEVER overwrites a better record.
 
    RANKING (deterministic, public info only):
      1. totalScore (Σ of per-level highest scores) — descending
@@ -48,7 +34,7 @@
 (function(global){
   'use strict';
 
-  /* ---------------- limits ---------------- */
+  /* ---------------- limits (client pre-checks; backend re-validates) ---- */
   var MAX_USERS = 300;            // doc-size safety for the shared document
   var MAX_NAME = 24;              // display-name length
   var MAX_PID = 20, MIN_PID = 3;  // private-ID length
@@ -59,20 +45,24 @@
   var MAX_RUNS = 40;              // idempotency ring per user
   var MAX_OUTBOX = 50;
   var FETCH_TIMEOUT_MS = 12000;
-  var MAX_ATTEMPTS = 3;
   var SESSION_KEY = 'starboundProfileSessionV1';
   var CACHE_KEY = 'starboundProfilesCacheV1';
   var OUTBOX_KEY = 'starboundProfileOutboxV1';
-  /* One-time global gameplay reset marker (see Save.migrateResetOnce for the
-     local twin). The server wipe sets doc.resetVersion=1; every write path
-     preserves it so the marker survives read-modify-write cycles. Gameplay
-     recorded after the reset is never touched again. */
   var RESET_VERSION = 1;
 
-  function cfg(){ return global.SP_ProfilesConfig || {}; }
+  function apiBase(){
+    try{
+      if(global.SP_ApiConfig && typeof global.SP_ApiConfig.getBase === 'function'){
+        var b = global.SP_ApiConfig.getBase();
+        if(typeof b === 'string' && b) return b.replace(/\/$/, '');
+      }
+    }catch(e){}
+    return '';
+  }
 
   /* ---------------- tiny pure-JS SHA-256 (deterministic on every device,
-     including file:// where SubtleCrypto may be missing). Returns hex. ---- */
+     including file:// where SubtleCrypto may be missing). Kept for the
+     ownership test seam; the backend performs authoritative verification. */
   function sha256hex(ascii){
     function rr(v,a){ return (v>>>a)|(v<<(32-a)); }
     var maxWord = Math.pow(2,32), result = '';
@@ -137,12 +127,7 @@
     return s.slice(0, nBytes * 2);
   }
 
-  function publicId(){
-    return 'p_' + Date.now().toString(36) + '_' + randHex(6);
-  }
-
-  /* ---------------- validation (frontend AND backend-gate: every write
-     path re-validates, so forged payloads are clamped/rejected) ---------- */
+  /* ---------------- validation (client pre-checks; backend re-validates) */
   var PID_RE = /^[a-z0-9._-]+$/i;
 
   function cleanName(name){
@@ -183,7 +168,7 @@
     return { ok: false, error: 'Please choose a profile icon.' };
   }
 
-  /* ---------------- sanitizers (applied to every doc read AND write) ---- */
+  /* ---------------- sanitizers (cache + test seams) --------------------- */
   function num(v, lo, hi, fb){
     v = Number(v);
     if(!isFinite(v)) return fb;
@@ -210,6 +195,19 @@
     return fb;
   }
 
+  function sanitizeLevels(raw){
+    var levels = {};
+    if(raw && typeof raw === 'object'){
+      for(var k in raw){
+        var n = parseInt(k, 10);
+        if(!(n >= 1 && n <= MAX_LEVEL)) continue;
+        var row = sanitizeLevelRow(raw[k]);
+        if(row) levels[String(n)] = row;
+      }
+    }
+    return levels;
+  }
+
   function sanitizeUser(u){
     if(!u || typeof u !== 'object') return null;
     var id = String(u.id || '');
@@ -217,15 +215,6 @@
     var name = cleanName(u.name).slice(0, MAX_NAME);
     var pid = String(u.privateId == null ? '' : u.privateId).trim().slice(0, MAX_PID);
     if(!name || !PID_RE.test(pid)) return null;
-    var levels = {};
-    if(u.levels && typeof u.levels === 'object'){
-      for(var k in u.levels){
-        var n = parseInt(k, 10);
-        if(!(n >= 1 && n <= MAX_LEVEL)) continue;
-        var row = sanitizeLevelRow(u.levels[k]);
-        if(row) levels[String(n)] = row;
-      }
-    }
     var runs = Array.isArray(u.runs) ? u.runs.filter(function(r){ return typeof r === 'string' && r.length <= 64; }).slice(-MAX_RUNS) : [];
     return {
       id: id,
@@ -237,7 +226,7 @@
       updatedAt: num(u.updatedAt, 1, 9e15, Date.now()),
       seenAt: num(u.seenAt, 0, 9e15, 0),
       totalCoins: num(u.totalCoins, 0, 50000000, 0),
-      levels: levels,
+      levels: sanitizeLevels(u.levels),
       runs: runs
     };
   }
@@ -257,24 +246,86 @@
     return { v: 1, resetVersion: rv, users: out };
   }
 
-  /* PUBLIC shape: the ONLY representation of another player the product
-     ever uses. Strips privateId, secretHash and runIds. */
-  function publicUser(u){
-    u = sanitizeUser(u);
-    if(!u) return null;
-    var lv = 0, score = 0;
-    for(var k in u.levels){ lv++; score += u.levels[k].s; }
+  /* Cached PUBLIC entry (what /api/profiles returns): no private fields by
+     construction — there is nothing here to strip. */
+  function sanitizePublicCached(u){
+    if(!u || typeof u !== 'object') return null;
+    var id = String(u.id || '');
+    if(!/^p_[a-z0-9_]+$/i.test(id) || id.length > 64) return null;
+    var name = cleanName(u.name).slice(0, MAX_NAME);
+    if(!name) return null;
     return {
-      id: u.id,
-      name: u.name,
-      avatar: u.avatar,
-      createdAt: u.createdAt,
-      updatedAt: u.updatedAt,
-      totalCoins: u.totalCoins,
-      levelsCompleted: lv,
-      totalScore: score,
-      levels: u.levels
+      id: id,
+      name: name,
+      avatar: sanitizeAvatar(u.avatar, 'nova-star'),
+      createdAt: num(u.createdAt, 1, 9e15, Date.now()),
+      updatedAt: num(u.updatedAt, 1, 9e15, Date.now()),
+      totalCoins: num(u.totalCoins, 0, 50000000, 0),
+      levels: sanitizeLevels(u.levels)
     };
+  }
+
+  /* Cached OWNER entry (what /api/profiles/me returns): includes the
+     owner's privateId, never a secretHash (the backend never sends one). */
+  function sanitizeOwnerCached(u){
+    var p = sanitizePublicCached(u);
+    if(!p) return null;
+    var pid = String(u.privateId == null ? '' : u.privateId).trim().slice(0, MAX_PID);
+    if(!pid || !PID_RE.test(pid)) return null;
+    p.privateId = pid;
+    p.seenAt = num(u.seenAt, 0, 9e15, 0);
+    return p;
+  }
+
+  function sanitizeCachedDoc(doc){
+    if(!doc || typeof doc !== 'object') return { v: 1, resetVersion: 0, users: [], me: null };
+    var arr = Array.isArray(doc.users) ? doc.users : [];
+    var seen = {}, out = [];
+    for(var i = 0; i < arr.length && out.length < MAX_USERS; i++){
+      var u = sanitizePublicCached(arr[i]);
+      if(!u || seen[u.id]) continue;
+      seen[u.id] = true;
+      out.push(u);
+    }
+    return { v: 1, resetVersion: 0, users: out, me: sanitizeOwnerCached(doc.me) };
+  }
+
+  /* PUBLIC projection: strips privateId/seenAt from any owner-shaped record
+     (defense in depth — server responses are already public-only). */
+  function toPublic(u){
+    if(!u || typeof u !== 'object') return null;
+    var p = sanitizePublicCached(u);
+    if(!p) return null;
+    var lv = 0, score = 0;
+    for(var k in p.levels){ lv++; score += p.levels[k].s; }
+    p.levelsCompleted = lv;
+    p.totalScore = score;
+    return p;
+  }
+
+  /* PUBLIC shape: the ONLY representation of another player the product
+     ever uses. Never contains privateId, secretHash or runIds. */
+  function publicUser(u){
+    if(!u || typeof u !== 'object') return null;
+    // Full internal records (tests / legacy) carry private fields — strip.
+    if(u.privateId !== undefined || u.secretHash !== undefined || u.runs !== undefined){
+      u = sanitizeUser(u);
+      if(!u) return null;
+      var lv = 0, score = 0;
+      for(var k in u.levels){ lv++; score += u.levels[k].s; }
+      return {
+        id: u.id,
+        name: u.name,
+        avatar: u.avatar,
+        createdAt: u.createdAt,
+        updatedAt: u.updatedAt,
+        totalCoins: u.totalCoins,
+        levelsCompleted: lv,
+        totalScore: score,
+        levels: u.levels
+      };
+    }
+    return toPublic(u);
   }
 
   function totalsOf(u){
@@ -284,17 +335,29 @@
   }
 
   /* RANKING — deterministic, public info only (see header comment). */
+  function rowTotals(p){
+    if(p && typeof p.levelsCompleted === 'number' && typeof p.totalScore === 'number'){
+      return { levelsCompleted: p.levelsCompleted, totalScore: p.totalScore,
+        totalCoins: p.totalCoins || 0, createdAt: p.createdAt || 0, id: p.id };
+    }
+    var t = totalsOf({ levels: (p && p.levels) || {} });
+    return { levelsCompleted: t.levelsCompleted, totalScore: t.totalScore,
+      totalCoins: (p && p.totalCoins) || 0, createdAt: (p && p.createdAt) || 0, id: (p && p.id) || '' };
+  }
   function compareRanked(a, b){
-    if(b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
-    if(b.levelsCompleted !== a.levelsCompleted) return b.levelsCompleted - a.levelsCompleted;
-    if(b.totalCoins !== a.totalCoins) return b.totalCoins - a.totalCoins;
-    if(a.createdAt !== b.createdAt) return a.createdAt - b.createdAt;
-    return a.id < b.id ? -1 : (a.id > b.id ? 1 : 0);
+    var ta = rowTotals(a), tb = rowTotals(b);
+    if(tb.totalScore !== ta.totalScore) return tb.totalScore - ta.totalScore;
+    if(tb.levelsCompleted !== ta.levelsCompleted) return tb.levelsCompleted - ta.levelsCompleted;
+    if(tb.totalCoins !== ta.totalCoins) return tb.totalCoins - ta.totalCoins;
+    if(ta.createdAt !== tb.createdAt) return ta.createdAt - tb.createdAt;
+    return ta.id < tb.id ? -1 : (ta.id > tb.id ? 1 : 0);
   }
 
-  /* ---------------- network (mirrors the proven Reviews transport) ------ */
-  function fetchJson(url, opts){
+  /* ---------------- network (secure backend API) ------------------------ */
+  function fetchJson(pathname, opts){
     opts = opts || {};
+    var base = apiBase();
+    if(!base) return Promise.reject(Object.assign(new Error('not configured'), { status: 404 }));
     var controller = null, timer = null;
     try{
       if(typeof AbortController !== 'undefined'){
@@ -304,10 +367,12 @@
     }catch(e){ controller = null; }
     var f = global.fetch;
     if(typeof f !== 'function') return Promise.reject(Object.assign(new Error('Network unavailable'), { network: true }));
-    var p = f(url, {
+    var headers = { 'Content-Type': 'application/json' };
+    if(opts.secret) headers['X-Profile-Secret'] = opts.secret;
+    var p = f(base + pathname, {
       method: opts.method || 'GET',
-      headers: opts.headers || {},
-      body: opts.body,
+      headers: headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
       mode: 'cors',
       signal: controller ? controller.signal : undefined
     }).then(function(res){
@@ -318,6 +383,8 @@
         if(!res.ok){
           var err = new Error('Request failed (' + res.status + ')');
           err.status = res.status; err.data = data;
+          var msg = data && data.error ? String(data.error) : '';
+          if(msg) err.message = msg;
           throw err;
         }
         return data;
@@ -341,61 +408,12 @@
     if(err.status === 404 && what === 'load') return 'Unable to load profiles. Please try again.';
     if(err.status >= 500 && err.status <= 599) return 'The profile server had a hiccup. Please try again.';
     if(err.name === 'AbortError' || (err.cause && err.cause.name === 'AbortError')) return 'The profile server took too long. Please try again.';
+    if(err.message && !/^Request failed/.test(err.message)) return err.message;
     return 'Could not ' + (what === 'load' ? 'load profiles' : 'save your profile') + ' right now. Please try again.';
-  }
-
-  function store(){
-    var c = cfg();
-    if(!c.BACKEND_BASE || !c.BACKEND_NAMESPACE || !c.BACKEND_ENTRY) return null;
-    return { url: String(c.BACKEND_BASE).replace(/\/$/, '') + '/' +
-      encodeURIComponent(c.BACKEND_NAMESPACE) + '/' + encodeURIComponent(c.BACKEND_ENTRY) };
-  }
-
-  function storeLoad(){
-    var s = store();
-    if(!s) return Promise.reject(Object.assign(new Error('not configured'), { status: 404 }));
-    return fetchJson(s.url, {}).then(function(doc){
-      if(doc && doc.error) throw Object.assign(new Error('backend error'), { status: 500 });
-      return sanitizeDoc(doc);
-    });
-  }
-
-  function storeWrite(doc){
-    var s = store();
-    return fetchJson(s.url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(doc)
-    }).then(function(ack){
-      if(!ack || ack.success !== true) throw new Error('Server did not confirm the profile.');
-      return true;
-    });
   }
 
   function retriable(err){
     return !!(err && (err.network || err.status === 429 || (err.status >= 500 && err.status <= 599)));
-  }
-
-  /* read-modify-write with fresh re-reads: max/min merges converge even
-     under interleaved writers; idempotent runIds prevent double-counting. */
-  function updateDoc(mutator){
-    var attempt = 0;
-    function once(){
-      attempt++;
-      return storeLoad().then(function(doc){
-        var res = mutator(doc) || {};
-        if(res.skip) return { doc: doc, value: res.value };
-        return storeWrite(res.doc || doc).then(function(){
-          writeCache(res.doc || doc);
-          return { doc: res.doc || doc, value: res.value };
-        });
-      }).catch(function(err){
-        if(attempt < MAX_ATTEMPTS && retriable(err))
-          return new Promise(function(res){ setTimeout(res, 500 * attempt); }).then(once);
-        throw err;
-      });
-    }
-    return once();
   }
 
   /* ---------------- session (owner identity, this device only) ----------- */
@@ -415,6 +433,8 @@
   function clearSession(){
     try{ if(global.localStorage) global.localStorage.removeItem(SESSION_KEY); }catch(e){}
   }
+  /* Local ownership check (test seam). Authoritative verification happens
+     server-side; the client keeps this only for cached-shape tests. */
   function owns(session, user){
     if(!session || !user || !user.secretHash) return false;
     try{ return sha256hex(String(session.secret)) === String(user.secretHash).toLowerCase(); }
@@ -427,7 +447,9 @@
       var raw = global.localStorage && global.localStorage.getItem(CACHE_KEY);
       if(!raw) return { at: 0, doc: null };
       var d = JSON.parse(raw);
-      return { at: d.at || 0, doc: d.doc ? sanitizeDoc(d.doc) : null };
+      var doc = d.doc ? sanitizeCachedDoc(d.doc) : null;
+      if(doc && !doc.me && !doc.users.length) doc = null;
+      return { at: d.at || 0, doc: doc };
     }catch(e){ return { at: 0, doc: null }; }
   }
   function writeCache(doc){
@@ -450,7 +472,9 @@
     writeOutbox(box);
   }
 
-  /* ---------------- merge engine (pure, unit-testable) ------------------- */
+  /* ---------------- merge engine (pure, unit-testable mirrors of the
+     server-side merge — used by tests; the backend applies them
+     authoritatively on every completion/attempt write) ------------------- */
   function applyCompletion(user, level, data){
     level = Math.min(MAX_LEVEL, Math.max(1, parseInt(level, 10) || 0));
     if(!level) return { user: user, improved: false };
@@ -487,6 +511,12 @@
     return user;
   }
 
+  function dropStatus(err){
+    // 4xx (except 429) will never succeed on retry — drop instead of requeue.
+    if(err && typeof err.status === 'number' && err.status >= 400 && err.status < 500 && err.status !== 429) return true;
+    return false;
+  }
+
   /* ================= public API ================= */
   var Profiles = {
     MAX_NAME: MAX_NAME, MAX_PID: MAX_PID, MIN_PID: MIN_PID, MAX_USERS: MAX_USERS,
@@ -508,7 +538,16 @@
 
     /* ---- reads (always a genuine backend read; cache only on failure) -- */
     load: function(){
-      return storeLoad().then(function(doc){
+      var session = loadSession();
+      var usersP = fetchJson('/api/profiles?limit=500', {});
+      var meP = session
+        ? fetchJson('/api/profiles/me?id=' + encodeURIComponent(session.id), { secret: session.secret })
+            .then(function(r){ return (r && r.user) ? sanitizeOwnerCached(r.user) : null; })
+            .catch(function(){ return null; })
+        : Promise.resolve(null);
+      return Promise.all([usersP, meP]).then(function(pair){
+        var rawUsers = pair[0] && Array.isArray(pair[0].users) ? pair[0].users : [];
+        var doc = sanitizeCachedDoc({ users: rawUsers, me: pair[1] });
         writeCache(doc);
         return { ok: true, doc: doc, stale: false, error: '' };
       }).catch(function(err){
@@ -521,28 +560,26 @@
       });
     },
 
-    /* Owner's full record (includes privateId). Null when no/invalid session. */
+    /* Owner's record (includes privateId, never secretHash). The backend
+       verified the session secret before returning it. */
     me: function(doc){
       var s = loadSession();
-      if(!s || !doc) return null;
-      for(var i = 0; i < doc.users.length; i++){
-        if(doc.users[i].id === s.id) return owns(s, doc.users[i]) ? doc.users[i] : null;
-      }
-      return null;
+      if(!s || !doc || !doc.me) return null;
+      if(doc.me.id !== s.id) return null;
+      return doc.me;
     },
 
     myPublicId: function(){ var s = loadSession(); return s ? s.id : null; },
 
-    /* Public profile of ANY player (stripped). Never exposes private data. */
+    /* Public profile of ANY player (stripped server-side). Never exposes
+       private data — public entries contain none by construction. */
     getPublic: function(doc, publicId){
       if(!doc || !publicId) return null;
-      for(var i = 0; i < doc.users.length; i++){
-        if(doc.users[i].id === publicId){
-          var p = publicUser(doc.users[i]);
-          if(p && Object.keys(p.levels).length) return p; // played ≥1 level
-          return p;
-        }
+      var list = Array.isArray(doc.users) ? doc.users : [];
+      for(var i = 0; i < list.length; i++){
+        if(list[i].id === publicId) return toPublic(list[i]);
       }
+      if(doc.me && doc.me.id === publicId) return toPublic(doc.me);
       return null;
     },
 
@@ -550,8 +587,10 @@
     leaderboard: function(doc, limit){
       limit = Math.min(200, Math.max(1, parseInt(limit, 10) || 100));
       var rows = [];
-      for(var i = 0; i < (doc ? doc.users.length : 0); i++){
-        var p = publicUser(doc.users[i]);
+      var list = doc ? doc.users : [];
+      if(!Array.isArray(list)) list = [];
+      for(var i = 0; i < list.length; i++){
+        var p = toPublic(list[i]);
         if(!p || !Object.keys(p.levels).length) continue; // created AND played
         rows.push(p);
       }
@@ -570,7 +609,7 @@
       return 0;
     },
 
-    /* ---- account creation ---- */
+    /* ---- account creation (server mints id + edit secret) ---- */
     createAccount: function(name, privateId, avatar){
       var vn = validateName(name);
       if(!vn.ok) return Promise.resolve({ ok: false, error: vn.error });
@@ -578,76 +617,51 @@
       if(!vp.ok) return Promise.resolve({ ok: false, error: vp.error });
       var va = validateAvatar(avatar);
       if(!va.ok) return Promise.resolve({ ok: false, error: va.error });
-      var secret = randHex(32);
-      var rec = {
-        id: publicId(),
-        privateId: vp.value,
-        name: vn.value,
-        avatar: va.value,
-        secretHash: sha256hex(secret),
-        createdAt: Date.now(), updatedAt: Date.now(), seenAt: Date.now(),
-        totalCoins: 0, levels: {}, runs: []
-      };
-      return updateDoc(function(doc){
-        if(doc.users.length >= MAX_USERS)
-          throw Object.assign(new Error('Profile storage is full right now. Please try again later.'), { status: 413 });
-        for(var i = 0; i < doc.users.length; i++){
-          if(doc.users[i].privateId.toLowerCase() === vp.value.toLowerCase())
-            throw Object.assign(new Error('That player ID is already taken. Please choose another.'), { code: 'DUP_ID' });
-        }
-        doc.users.push(sanitizeUser(rec));
-        return { doc: doc, value: rec };
-      }).then(function(r){
-        saveSession({ id: r.value.id, secret: secret, privateId: r.value.privateId });
-        return { ok: true, user: r.value };
+      return fetchJson('/api/profiles', {
+        method: 'POST',
+        body: { name: vn.value, privateId: vp.value, avatar: va.value }
+      }).then(function(res){
+        if(!res || !res.user || !res.secret) throw new Error('Server did not confirm the profile.');
+        saveSession({ id: res.user.id, secret: String(res.secret).toLowerCase(), privateId: res.user.privateId });
+        return { ok: true, user: sanitizeOwnerCached(res.user) };
       }).catch(function(err){
-        return { ok: false, error: (err && (err.code === 'DUP_ID' || err.status === 413)) ? err.message : friendlyError(err, 'save') };
+        var msg = (err && err.message && !/^Request failed/.test(err.message)) ? err.message : friendlyError(err, 'save');
+        return { ok: false, error: msg };
       });
     },
 
-    /* ---- owner edits (name / avatar / privateId). Ownership verified. --- */
+    /* ---- owner edits (name / avatar / privateId). Ownership verified
+       server-side; wrong-secret edits fail with 403 and are rejected. --- */
     updateProfile: function(patch){
       var s = loadSession();
       if(!s) return Promise.resolve({ ok: false, error: 'No account on this device.' });
       var session = s;
-      var next = {};
+      var body = { secret: session.secret };
       if(patch.name !== undefined){
         var vn = validateName(patch.name);
         if(!vn.ok) return Promise.resolve({ ok: false, error: vn.error });
-        next.name = vn.value;
+        body.name = vn.value;
       }
       if(patch.avatar !== undefined){
         var va = validateAvatar(patch.avatar);
         if(!va.ok) return Promise.resolve({ ok: false, error: va.error });
-        next.avatar = va.value;
+        body.avatar = va.value;
       }
-      var wantPid = false, pidVal = '';
       if(patch.privateId !== undefined){
         var vp = validatePrivateId(patch.privateId);
         if(!vp.ok) return Promise.resolve({ ok: false, error: vp.error });
-        wantPid = true; pidVal = vp.value;
+        body.privateId = vp.value;
       }
-      return updateDoc(function(doc){
-        var u = null;
-        for(var i = 0; i < doc.users.length; i++) if(doc.users[i].id === session.id) u = doc.users[i];
-        if(!u) throw Object.assign(new Error('Account not found on the server.'), { code: 'NO_USER' });
-        if(!owns(session, u)) throw Object.assign(new Error('This device is not signed in as that player.'), { code: 'FORBIDDEN' });
-        if(wantPid){
-          for(var j = 0; j < doc.users.length; j++){
-            if(doc.users[j].id !== u.id && doc.users[j].privateId.toLowerCase() === pidVal.toLowerCase())
-              throw Object.assign(new Error('That player ID is already taken. Please choose another.'), { code: 'DUP_ID' });
-          }
-          u.privateId = pidVal;
-        }
-        if(next.name !== undefined) u.name = next.name;
-        if(next.avatar !== undefined) u.avatar = next.avatar;
-        u.updatedAt = Date.now(); u.seenAt = Date.now();
-        return { doc: doc, value: sanitizeUser(u) };
-      }).then(function(r){
-        if(wantPid) saveSession({ id: session.id, secret: session.secret, privateId: r.value.privateId });
-        return { ok: true, user: r.value };
+      return fetchJson('/api/profiles/' + encodeURIComponent(session.id), {
+        method: 'PATCH',
+        body: body
+      }).then(function(res){
+        if(!res || !res.user) throw new Error('Server did not confirm the profile.');
+        var user = sanitizeOwnerCached(res.user);
+        saveSession({ id: session.id, secret: session.secret, privateId: user ? user.privateId : session.privateId });
+        return { ok: true, user: user };
       }).catch(function(err){
-        var msg = (err && (err.code === 'DUP_ID' || err.code === 'NO_USER' || err.code === 'FORBIDDEN')) ? err.message : friendlyError(err, 'save');
+        var msg = (err && err.message && !/^Request failed/.test(err.message)) ? err.message : friendlyError(err, 'save');
         return { ok: false, error: msg };
       });
     },
@@ -657,17 +671,15 @@
       var s = loadSession();
       if(!s) return Promise.resolve({ ok: false, error: 'no-account' });
       var session = s;
-      level = Math.min(MAX_LEVEL, Math.max(1, parseInt(level, 10) || 0));
-      if(!level) return Promise.resolve({ ok: false, error: 'bad level' });
-      return updateDoc(function(doc){
-        var u = null;
-        for(var i = 0; i < doc.users.length; i++) if(doc.users[i].id === session.id) u = doc.users[i];
-        if(!u || !owns(session, u)) throw Object.assign(new Error('forbidden'), { code: 'FORBIDDEN' });
-        applyAttempt(u, level);
-        return { doc: doc, value: true };
+      level = parseInt(level, 10);
+      if(!(level >= 1 && level <= MAX_LEVEL)) return Promise.resolve({ ok: false, error: 'bad level' });
+      return fetchJson('/api/profiles/' + encodeURIComponent(session.id) + '/attempt', {
+        method: 'POST',
+        body: { level: level, secret: session.secret }
       }).then(function(){ return { ok: true }; })
         .catch(function(err){
-          if(err && err.code === 'FORBIDDEN') return { ok: false, error: 'forbidden' };
+          if(err && (err.status === 403 || err.status === 404)) return { ok: false, error: 'forbidden' };
+          if(err && dropStatus(err)) return { ok: false, error: friendlyError(err, 'save') };
           queueOp({ op: 'attempt', level: level });
           return { ok: false, error: friendlyError(err, 'save'), queued: true };
         });
@@ -678,44 +690,62 @@
       if(!s) return Promise.resolve({ ok: false, error: 'no-account' });
       var session = s;
       data = data || {};
-      return updateDoc(function(doc){
-        var u = null;
-        for(var i = 0; i < doc.users.length; i++) if(doc.users[i].id === session.id) u = doc.users[i];
-        if(!u || !owns(session, u)) throw Object.assign(new Error('forbidden'), { code: 'FORBIDDEN' });
-        var r = applyCompletion(u, level, data);
-        return { doc: doc, value: { improved: r.improved } };
-      }).then(function(r){ return { ok: true, improved: !!r.value.improved }; })
+      level = parseInt(level, 10);
+      var score = Number(data.score), coins = Number(data.coins), time = Number(data.time);
+      if(!(level >= 1 && level <= MAX_LEVEL)) return Promise.resolve({ ok: false, error: 'bad level' });
+      if(!isFinite(score) || score < 0 || score > MAX_SCORE) return Promise.resolve({ ok: false, error: 'bad score' });
+      if(!isFinite(coins) || coins < 0 || coins > MAX_COINS_RUN) return Promise.resolve({ ok: false, error: 'bad coins' });
+      if(!isFinite(time) || time <= 0 || time > MAX_TIME_S) return Promise.resolve({ ok: false, error: 'bad time' });
+      var runId = typeof data.runId === 'string' ? data.runId.slice(0, 64) : '';
+      return fetchJson('/api/profiles/' + encodeURIComponent(session.id) + '/completion', {
+        method: 'POST',
+        body: { level: level, score: Math.floor(score), coins: Math.floor(coins), time: time, runId: runId, secret: session.secret }
+      }).then(function(res){ return { ok: true, improved: !!(res && res.improved) }; })
         .catch(function(err){
-          if(err && err.code === 'FORBIDDEN') return { ok: false, error: 'forbidden' };
-          queueOp({ op: 'complete', level: level, data: data });
+          if(err && (err.status === 403 || err.status === 404)) return { ok: false, error: 'forbidden' };
+          if(err && dropStatus(err)) return { ok: false, error: friendlyError(err, 'save') };
+          queueOp({ op: 'complete', level: level, data: { score: score, coins: coins, time: time, runId: runId } });
           return { ok: false, error: friendlyError(err, 'save'), queued: true };
         });
     },
 
-    /* Retry queued offline ops, oldest first. Never throws. */
+    /* Retry queued offline ops, oldest first. Never throws. Permanent
+       4xx failures are dropped; network failures stay queued. */
     flushOutbox: function(){
       var s = loadSession();
       var box = readOutbox();
       if(!s || !box.length) return Promise.resolve({ ok: true, flushed: 0 });
-      var session = s, flushed = 0;
+      var session = s;
+      var remaining = [];
+      var flushed = 0;
       var chain = Promise.resolve();
       box.forEach(function(item){
         chain = chain.then(function(){
-          return updateDoc(function(doc){
-            var u = null;
-            for(var i = 0; i < doc.users.length; i++) if(doc.users[i].id === session.id) u = doc.users[i];
-            if(!u || !owns(session, u)) throw Object.assign(new Error('forbidden'), { code: 'FORBIDDEN' });
-            if(item.op === 'attempt') applyAttempt(u, item.level);
-            else if(item.op === 'complete') applyCompletion(u, item.level, item.data || {});
-            return { doc: doc, value: true };
-          }).then(function(){ flushed++; }).catch(function(){ /* keep for later */ });
+          var p;
+          if(item.op === 'attempt'){
+            p = fetchJson('/api/profiles/' + encodeURIComponent(session.id) + '/attempt', {
+              method: 'POST',
+              body: { level: item.level, secret: session.secret }
+            });
+          } else if(item.op === 'complete'){
+            var d = item.data || {};
+            p = fetchJson('/api/profiles/' + encodeURIComponent(session.id) + '/completion', {
+              method: 'POST',
+              body: { level: item.level, score: d.score, coins: d.coins, time: d.time, runId: d.runId, secret: session.secret }
+            });
+          } else {
+            flushed++; // unknown op: drop
+            return null;
+          }
+          return p.then(function(){ flushed++; }).catch(function(err){
+            if(err && dropStatus(err)) flushed++; // permanent: drop
+            else remaining.push(item);            // transient: keep for later
+          });
         });
       });
       return chain.then(function(){
-        // Drop the ops that succeeded (prefix) — failures stay queued.
-        var rest = readOutbox().slice(flushed);
-        writeOutbox(rest);
-        return { ok: true, flushed: flushed, pending: rest.length };
+        writeOutbox(remaining);
+        return { ok: true, flushed: flushed, pending: remaining.length };
       });
     },
     outboxCount: function(){ return readOutbox().length; },

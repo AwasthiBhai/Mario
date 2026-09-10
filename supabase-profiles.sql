@@ -1,10 +1,10 @@
 -- STARBOUND — Profiles + Leaderboard: Supabase upgrade path (optional future).
 -- ---------------------------------------------------------------------------
--- The game reads/writes global profiles through the shared MantleDB document
--- (same database service as Reviews, entry `profiles-v1`) so it keeps working
--- as a pure static site with zero secrets. This file is the DOCUMENTED strict
--- upgrade path to normalized Postgres when the project outgrows a single
--- shared document.
+-- The game reads/writes global profiles through the secure backend API
+-- (server/ → same database service as Reviews, entry `profiles-v1`), which
+-- verifies edit-secret ownership server-side. This file is the DOCUMENTED
+-- strict upgrade path to normalized Postgres when the project outgrows a
+-- single shared document.
 --
 -- 1. Create a free project at https://supabase.com
 -- 2. Open the project → SQL Editor → run this whole file.

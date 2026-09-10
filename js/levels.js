@@ -14,6 +14,31 @@
     {name:'Starfall Citadel',icon:'✦',sky:['#060818','#2b1f5e','#FF8A3D'],ground:'#2c2f6b',groundTop:'#FFC94D',plat:'#1a1c44',hazard:'starfire',weather:'stardust',music:9,tip:'The final climb. Everything you learned. Go, Pip!'}
   ];
   const BOSS_NAMES={5:'Gloomcap the Grumbler',10:'Maw of the Deep',15:'Dune Tyrant Sssara',20:'Frost Maw Ymir',25:'Canopy Warden',30:'Reef Siren Coralia',35:'Storm Herald Tempest',40:'Magma Colossus Ignar',45:'Gloomspire King Nox',50:'VOIDSTAR, the Star-Eater'};
+  /* WORLD-SPECIFIC BOSS SKINS (visual identity only — hitbox, HP, AI,
+     attacks and difficulty are untouched; see engine drawBoss). Each boss
+     level gets a unique silhouette/palette/motif drawn from its world:
+       5 Ember Meadow      → grumpy mushroom brute (cap + spots + vines)
+      10 Dewdrop Caverns   → abyss angler (lure + drip fangs, cave navy)
+      15 Cinder Dunes      → sandstone pharaoh-serpent (sun disc, gold)
+      20 Frostfall Peaks   → frost giant (icicle horns, ice pale)
+      25 Treetop Lanterns  → thorn guardian (vine antlers + lanterns)
+      30 Tideglow Reef     → coral siren (shell crown + fins, teal/rose)
+      35 Thunderhead Skyway→ tempest roc (bolt horns + cloud tufts)
+      40 Magma Hollow      → lava golem (magma cracks + flame crown)
+      45 Gloomspire Ruins  → shadow king (ruin battlements + void eyes)
+      50 Starfall Citadel  → cosmic eater (void ring + star core) */
+  const BOSS_SKINS={
+    5:{gear:'cap',body:['#6b8f3d','#2f4a1e'],outline:'#c9563c',gearColor:'#c9563c',eyeWhite:'#fff',pupil:'#2b1a12',teeth:3,belly:'#a8c86b',aura:'#7ed957'},
+    10:{gear:'lure',body:['#1c3f7a','#0a1430'],outline:'#5DA6FF',gearColor:'#5DF2C8',eyeWhite:'#d8f4ff',pupil:'#062a4a',teeth:5,belly:'#0e2a5e',aura:'#5DA6FF'},
+    15:{gear:'sundisc',body:['#d9a44d','#7a4a1e'],outline:'#FFE9A8',gearColor:'#FFC94D',eyeWhite:'#fff6de',pupil:'#4a2408',teeth:3,belly:'#ffe9a8',aura:'#FFC94D'},
+    20:{gear:'icicles',body:['#cfeaff','#5f7fa6'],outline:'#ffffff',gearColor:'#bfe6ff',eyeWhite:'#ffffff',pupil:'#1e4a6e',teeth:4,belly:'#e8f6ff',aura:'#bfe6ff'},
+    25:{gear:'antlers',body:['#2f6b3a','#123524'],outline:'#7ed957',gearColor:'#8a5a2b',eyeWhite:'#fff8d8',pupil:'#123524',teeth:3,belly:'#5da85f',aura:'#FFE95c'},
+    30:{gear:'shell',body:['#1f8a80','#0b3a44'],outline:'#FF6B9D',gearColor:'#ff9dbd',eyeWhite:'#ffffff',pupil:'#7a1040',teeth:3,belly:'#5DF2C8',aura:'#5DF2C8'},
+    35:{gear:'bolts',body:['#4a4f7a','#23264a'],outline:'#FFE95c',gearColor:'#FFE95c',eyeWhite:'#fffbe8',pupil:'#23264a',teeth:4,belly:'#6b6fb8',aura:'#B388FF'},
+    40:{gear:'flames',body:['#3a1a1a','#160808'],outline:'#FF5A2B',gearColor:'#ff8a3d',eyeWhite:'#ffe9a8',pupil:'#a31200',teeth:4,belly:'#7a1e12',aura:'#FF5A2B'},
+    45:{gear:'ruincrown',body:['#2c2c44','#0a0a12'],outline:'#B388FF',gearColor:'#8a8ab8',eyeWhite:'#B388FF',pupil:'#0a0a12',teeth:4,belly:'#3a3a52',aura:'#B388FF'},
+    50:{gear:'voidring',body:['#2b0d3a','#05010d'],outline:'#B388FF',gearColor:'#FFC94D',eyeWhite:'#e8dcff',pupil:'#ff2b6e',teeth:4,belly:'#1a0530',aura:'#FFC94D'}
+  };
   const ENEMY_POOL=[['walker'],['walker','hopper'],['walker','flyer','hopper'],['runner','flyer','hopper'],['runner','spitter','patroller'],['flyer','spitter','brute','patroller'],['runner','spitter','brute','hopper','patroller']];
   function rng32(seed){ let a=seed>>>0; return function(){ a|=0;a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
   function pick(r,arr){ return arr[Math.floor(r()*arr.length)]; }
@@ -567,7 +592,7 @@
     if(isBoss){
       const ax=width-700;
       solids.push({x:ax,y:GROUND_Y,w:760,h:200,type:'ground'});
-      boss={name:BOSS_NAMES[num]||('Boss '+num),hp:3+Math.floor(num/6)+(num===50?6:0),maxhp:3+Math.floor(num/6)+(num===50?6:0),x:width-380,y:GROUND_Y-90,phase:1,t:0};
+      boss={name:BOSS_NAMES[num]||('Boss '+num),hp:3+Math.floor(num/6)+(num===50?6:0),maxhp:3+Math.floor(num/6)+(num===50?6:0),x:width-380,y:GROUND_Y-90,phase:1,t:0,skin:num};
     }
     // Clean coin layout: reposition only (never delete) so shards look designed —
     // no coin-to-coin overlaps, nothing inside solids/hazards/flags, all reachable.
@@ -580,5 +605,5 @@
     };
   }
   function levelName(num){ const w=Math.floor((num-1)/5); return 'Level '+num+' · '+WORLDS[w].name; }
-  global.SP_Levels={WORLDS,BOSS_NAMES,buildLevel,levelName};
+  global.SP_Levels={WORLDS,BOSS_NAMES,BOSS_SKINS,buildLevel,levelName};
 })(window);

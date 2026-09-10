@@ -710,25 +710,191 @@
         c.restore();
       }
     },
+    /* WORLD-SPECIFIC BOSS SKINS (visual only — hitbox, HP, AI, attacks and
+       difficulty are untouched). Identity comes from SP_Levels.BOSS_SKINS
+       keyed by boss level number (5..50); every gear/eye/belly/aura choice
+       below is pure canvas paint. Falls back to the legacy generic brute
+       if a skin is ever missing, so a stale cache can never break render. */
+    bossSkin(){
+      try{
+        const B=this.level&&this.level.boss;
+        const SK=global.SP_Levels&&global.SP_Levels.BOSS_SKINS;
+        const key=(B&&B.skin)||this.levelNum;
+        if(SK&&SK[key]) return SK[key];
+      }catch(e){}
+      return {gear:'horns',body:['#5a1e2b','#2b0d12'],outline:'#FF6B6B',gearColor:'#FFD166',eyeWhite:'#fff',pupil:'#f00',teeth:4,belly:'#7a2a35',aura:'#FF6B6B'};
+    },
+    drawBossGear(c,B,skin){
+      const cx=B.x+B.w/2, top=B.y, ph=B.phase||1;
+      const gc=skin.gearColor, t=this.tGlobal;
+      const still=this.settings.reducedMotion;
+      const bob=still?0:Math.sin(t*3)*2;
+      switch(skin.gear){
+        case 'cap': { // Gloomcap: mushroom cap with spots + vine curls
+          c.fillStyle=gc;
+          c.beginPath(); c.ellipse(cx,top+2,B.w*0.62,20,0,Math.PI,0); c.fill();
+          c.fillStyle='rgba(255,255,255,0.85)';
+          const spots=[[-0.38,-10,5],[0,-14,6],[0.36,-9,4.4],[-0.12,-7,3.4]];
+          for(const s of spots){ c.beginPath(); c.arc(cx+s[0]*B.w,top+s[1],s[2],0,7); c.fill(); }
+          c.strokeStyle='#2f4a1e'; c.lineWidth=3;
+          for(const d of [-1,1]){ c.beginPath(); c.moveTo(cx+d*B.w*0.3,top+B.h-6);
+            c.quadraticCurveTo(cx+d*B.w*0.42,top+B.h-16,cx+d*B.w*0.34,top+B.h-24); c.stroke(); }
+          break; }
+        case 'lure': { // Maw of the Deep: angler stalk + glowing lure
+          c.strokeStyle=gc; c.lineWidth=3;
+          c.beginPath(); c.moveTo(cx,top+2); c.quadraticCurveTo(cx+14,top-22,cx-6,top-30+bob); c.stroke();
+          c.fillStyle='rgba(93,242,200,0.25)';
+          c.beginPath(); c.arc(cx-6,top-30+bob,11,0,7); c.fill();
+          c.fillStyle='#d8fff4'; c.beginPath(); c.arc(cx-6,top-30+bob,6,0,7); c.fill();
+          c.fillStyle='#0e5a8a'; // drip fangs along the jaw
+          for(let i=0;i<3;i++){ const fx=B.x+B.w*0.3+i*B.w*0.2;
+            c.beginPath(); c.moveTo(fx-5,top+B.h*0.62); c.lineTo(fx,top+B.h*0.62+10); c.lineTo(fx+5,top+B.h*0.62); c.closePath(); c.fill(); }
+          break; }
+        case 'sundisc': { // Dune Tyrant: sun disc + rays + side stripes
+          c.fillStyle=gc; c.beginPath(); c.arc(cx,top-12+bob,13,0,7); c.fill();
+          c.fillStyle='#7a4a1e'; c.beginPath(); c.arc(cx,top-12+bob,6,0,7); c.fill();
+          c.strokeStyle=gc; c.lineWidth=3;
+          for(let i=0;i<8;i++){ const a=i*Math.PI/4+(still?0:t*0.4);
+            c.beginPath(); c.moveTo(cx+Math.cos(a)*16,top-12+bob+Math.sin(a)*16);
+            c.lineTo(cx+Math.cos(a)*23,top-12+bob+Math.sin(a)*23); c.stroke(); }
+          c.fillStyle='rgba(122,74,30,0.8)';
+          c.fillRect(B.x+6,top+B.h*0.5,5,B.h*0.3); c.fillRect(B.x+B.w-11,top+B.h*0.5,5,B.h*0.3);
+          break; }
+        case 'icicles': { // Frost Maw: icicle horns + snow sparkles
+          c.fillStyle=gc;
+          const horns=[[-0.36,26],[-0.13,34],[0.13,34],[0.36,26]];
+          for(const h of horns){ const hx=cx+h[0]*B.w;
+            c.beginPath(); c.moveTo(hx-7,top+4); c.lineTo(hx,top-h[1]-(ph*3)); c.lineTo(hx+7,top+4); c.closePath(); c.fill(); }
+          c.fillStyle='#ffffff';
+          for(let i=0;i<4;i++){ const sx=B.x+10+i*(B.w-20)/3, sy=top+12+((i*29)%22);
+            const tw=still?0.8:0.4+0.6*Math.abs(Math.sin(t*2+i*1.7));
+            c.globalAlpha=tw; c.fillRect(sx,sy,3,3); c.globalAlpha=1; }
+          break; }
+        case 'antlers': { // Canopy Warden: vine antlers + hanging lanterns
+          c.strokeStyle=gc; c.lineWidth=4;
+          for(const d of [-1,1]){
+            c.beginPath(); c.moveTo(cx+d*B.w*0.28,top+4);
+            c.quadraticCurveTo(cx+d*B.w*0.44,top-16,cx+d*B.w*0.34,top-30);
+            c.moveTo(cx+d*B.w*0.4,top-14); c.lineTo(cx+d*B.w*0.5,top-24); c.stroke();
+            const lx=cx+d*B.w*0.34, ly=top-30+6+(still?0:Math.sin(t*3+d)*2);
+            c.fillStyle='rgba(255,233,92,0.3)'; c.beginPath(); c.arc(lx,ly,9,0,7); c.fill();
+            c.fillStyle='#FFE95c'; c.beginPath(); c.arc(lx,ly,4.5,0,7); c.fill();
+            c.strokeStyle=gc;
+          }
+          break; }
+        case 'shell': { // Reef Siren: scallop shell crown + side fins
+          c.fillStyle=gc;
+          for(let i=-1;i<=1;i++){ c.beginPath();
+            c.ellipse(cx+i*16,top-2,11,13,i*0.35,Math.PI,0); c.fill(); }
+          c.fillStyle='#ffd7e6'; c.beginPath(); c.arc(cx,top-8,4,0,7); c.fill();
+          c.fillStyle='rgba(255,157,189,0.9)';
+          for(const d of [-1,1]){ const fx=d<0?B.x-8:B.x+B.w+8;
+            c.beginPath(); c.moveTo(fx,top+B.h*0.4); c.lineTo(fx+d*16,top+B.h*0.5); c.lineTo(fx,top+B.h*0.62); c.closePath(); c.fill(); }
+          c.fillStyle='#ffffff'; // bubble pearls
+          for(let i=0;i<3;i++){ const bx=B.x+12+i*14, by=top+B.h-10-(still?0:Math.abs(Math.sin(t*2+i))*6);
+            c.globalAlpha=0.7; c.beginPath(); c.arc(bx,by,2.6,0,7); c.fill(); c.globalAlpha=1; }
+          break; }
+        case 'bolts': { // Storm Herald: lightning horns + cloud shoulders
+          c.fillStyle=gc;
+          for(const d of [-1,1]){ const hx=cx+d*B.w*0.3;
+            c.beginPath(); c.moveTo(hx-6,top+4); c.lineTo(hx+2,top-14);
+            c.lineTo(hx-3,top-14); c.lineTo(hx+5,top-28-(ph*3)); c.lineTo(hx+9,top-10);
+            c.lineTo(hx+3,top-10); c.lineTo(hx+8,top+4); c.closePath(); c.fill(); }
+          c.fillStyle='rgba(232,230,255,0.85)';
+          for(const d of [-1,1]){ const px=d<0?B.x+2:B.x+B.w-2;
+            c.beginPath(); c.ellipse(px,top+B.h*0.55,12,8,0,0,7); c.fill(); }
+          if(!still&&Math.floor(t*6)%2===0){ c.fillStyle='#fff';
+            c.fillRect(cx-14,top+6,3,10); c.fillRect(cx+11,top+10,3,8); }
+          break; }
+        case 'flames': { // Magma Colossus: flame crown + pulsing cracks
+          c.fillStyle=gc;
+          for(let i=0;i<3;i++){ const fx=cx+(i-1)*B.w*0.22, fh=22+i*5+(ph*4)+(still?0:Math.sin(t*5+i)*3);
+            c.beginPath(); c.moveTo(fx-9,top+4); c.quadraticCurveTo(fx-4,top-fh*0.6,fx,top-fh);
+            c.quadraticCurveTo(fx+4,top-fh*0.6,fx+9,top+4); c.closePath(); c.fill(); }
+          c.fillStyle='#ffe9a8';
+          c.beginPath(); c.moveTo(cx-6,top+4); c.lineTo(cx,top-14); c.lineTo(cx+6,top+4); c.closePath(); c.fill();
+          c.strokeStyle='rgba(255,138,61,'+(still?0.8:(0.55+0.35*Math.sin(t*4)))+')'; c.lineWidth=2.5;
+          c.beginPath(); c.moveTo(B.x+B.w*0.2,top+B.h*0.45); c.lineTo(B.x+B.w*0.35,top+B.h*0.6); c.lineTo(B.x+B.w*0.3,top+B.h*0.8);
+          c.moveTo(B.x+B.w*0.75,top+B.h*0.4); c.lineTo(B.x+B.w*0.62,top+B.h*0.62); c.lineTo(B.x+B.w*0.7,top+B.h*0.82); c.stroke();
+          break; }
+        case 'ruincrown': { // Gloomspire King: broken battlements + shard
+          c.fillStyle=gc;
+          c.fillRect(cx-B.w*0.34,top-16,B.w*0.2,18);
+          c.fillRect(cx-B.w*0.08,top-22,B.w*0.2,24);
+          c.save(); c.translate(cx+B.w*0.3,top-14); c.rotate(-0.28);
+          c.fillRect(-B.w*0.1,0,B.w*0.2,16); c.restore();
+          c.fillStyle=skin.aura; // floating shard
+          const sy=top-34+(still?0:Math.sin(t*2.4)*3);
+          c.save(); c.translate(cx+B.w*0.05,sy); c.rotate(0.5);
+          c.fillRect(-4,-4,8,8); c.restore();
+          c.strokeStyle='rgba(138,138,184,0.7)'; c.lineWidth=2; // etched runes
+          c.beginPath(); c.moveTo(B.x+B.w*0.15,top+B.h*0.5); c.lineTo(B.x+B.w*0.22,top+B.h*0.6); c.lineTo(B.x+B.w*0.15,top+B.h*0.7);
+          c.moveTo(B.x+B.w*0.8,top+B.h*0.5); c.lineTo(B.x+B.w*0.73,top+B.h*0.6); c.lineTo(B.x+B.w*0.8,top+B.h*0.7); c.stroke();
+          break; }
+        case 'voidring': { // VOIDSTAR: orbiting ring + star core + speckles
+          c.strokeStyle=gc; c.lineWidth=4;
+          c.save(); c.translate(cx,top+B.h*0.5); c.rotate(-0.32); c.scale(1,0.42);
+          c.beginPath(); c.arc(0,0,B.w*0.72+(still?0:Math.sin(t*2)*2),0,7); c.stroke(); c.restore();
+          const pulse=still?1:(0.85+0.15*Math.sin(t*3));
+          c.fillStyle='rgba(255,201,77,0.25)';
+          c.beginPath(); c.arc(cx,top+B.h*0.55,15*pulse,0,7); c.fill();
+          c.fillStyle='#FFE9A8';
+          c.beginPath(); c.arc(cx,top+B.h*0.55,6*pulse,0,7); c.fill();
+          c.fillStyle='#fff';
+          for(let i=0;i<5;i++){ const a=i*1.256+(still?0:t*0.6);
+            const sx=cx+Math.cos(a)*B.w*0.34, sy=top+B.h*0.5+Math.sin(a)*B.h*0.3;
+            c.globalAlpha=still?0.8:(0.35+0.6*Math.abs(Math.sin(t*2+i))); c.fillRect(sx,sy,2.4,2.4); c.globalAlpha=1; }
+          break; }
+        default: { // legacy generic brute horns (fallback only)
+          c.fillStyle=gc;
+          for(let i=0;i<4;i++){ const hx=B.x+8+i*(B.w-16)/3;
+            c.beginPath(); c.moveTo(hx-8,top+4); c.lineTo(hx,top-16-(ph*4)); c.lineTo(hx+8,top+4); c.closePath(); c.fill(); }
+        }
+      }
+    },
     drawBoss(c){
       const B=this.level.boss; if(!B) return; if(B.dead){ return; }
       if(B.x<this.cam.x-160||B.x>this.cam.x+VIEW_W+160) return;
+      const skin=this.bossSkin();
       const blink=B.hurtT>0&&Math.floor(this.tGlobal*16)%2===0;
       c.save(); if(blink) c.globalAlpha=0.55;
       c.fillStyle='rgba(0,0,0,0.35)'; c.beginPath(); c.ellipse(B.x+B.w/2,B.y+B.h+6,B.w/2,8,0,0,7); c.fill();
-      const grad=c.createLinearGradient(0,B.y,0,B.y+B.h); grad.addColorStop(0,this.levelNum===50?'#2b0d3a':'#5a1e2b'); grad.addColorStop(1,this.levelNum===50?'#0d0018':'#2b0d12');
+      const grad=c.createLinearGradient(0,B.y,0,B.y+B.h);
+      grad.addColorStop(0,skin.body[0]); grad.addColorStop(1,skin.body[1]);
       c.fillStyle=grad; this.rr(c,B.x,B.y,B.w,B.h,16); c.fill();
-      c.lineWidth=4; c.strokeStyle=this.levelNum===50?'#B388FF':'#FF6B6B'; c.stroke();
-      // crown / horns
-      c.fillStyle=this.levelNum===50?'#FFC94D':'#FFD166';
-      for(let i=0;i<4;i++){ const hx=B.x+8+i*(B.w-16)/3; c.beginPath(); c.moveTo(hx-8,B.y+4); c.lineTo(hx,B.y-16-(B.phase*4)); c.lineTo(hx+8,B.y+4); c.closePath(); c.fill(); }
-      // eyes
+      c.lineWidth=4; c.strokeStyle=skin.outline; c.stroke();
+      // belly patch (world-tinted)
+      c.fillStyle=skin.belly; c.globalAlpha*=(blink?1:0.55);
+      this.rr(c,B.x+B.w*0.18,B.y+B.h*0.52,B.w*0.64,B.h*0.4,12); c.fill();
+      c.globalAlpha=blink?0.55:1;
+      // world headgear / motif
+      this.drawBossGear(c,B,skin);
+      // eyes (track the player; void eyes glow)
       const look=Math.sign(this.player.x-B.x)*4;
-      c.fillStyle='#fff'; c.beginPath(); c.arc(B.x+B.w*0.32+look,B.y+B.h*0.4,9,0,7); c.fill(); c.beginPath(); c.arc(B.x+B.w*0.68+look,B.y+B.h*0.4,9,0,7); c.fill();
-      c.fillStyle='#f00'; c.beginPath(); c.arc(B.x+B.w*0.32+look,B.y+B.h*0.42,4,0,7); c.fill(); c.beginPath(); c.arc(B.x+B.w*0.68+look,B.y+B.h*0.42,4,0,7); c.fill();
-      // mouth
+      const voidEyes=skin.gear==='ruincrown'||skin.gear==='voidring';
+      c.fillStyle=skin.eyeWhite;
+      c.beginPath(); c.arc(B.x+B.w*0.32+look,B.y+B.h*0.4,9,0,7); c.fill();
+      c.beginPath(); c.arc(B.x+B.w*0.68+look,B.y+B.h*0.4,9,0,7); c.fill();
+      if(!voidEyes){
+        c.fillStyle=skin.pupil;
+        c.beginPath(); c.arc(B.x+B.w*0.32+look,B.y+B.h*0.42,4,0,7); c.fill();
+        c.beginPath(); c.arc(B.x+B.w*0.68+look,B.y+B.h*0.42,4,0,7); c.fill();
+      } else {
+        c.fillStyle=skin.pupil;
+        c.beginPath(); c.arc(B.x+B.w*0.32+look,B.y+B.h*0.4,4.5,0,7); c.fill();
+        c.beginPath(); c.arc(B.x+B.w*0.68+look,B.y+B.h*0.4,4.5,0,7); c.fill();
+      }
+      // angry brows for the fiercer sovereigns
+      if(skin.gear==='lure'||skin.gear==='sundisc'||skin.gear==='flames'||skin.gear==='ruincrown'||skin.gear==='voidring'){
+        c.strokeStyle='rgba(0,0,0,0.65)'; c.lineWidth=3.5;
+        c.beginPath(); c.moveTo(B.x+B.w*0.2,B.y+B.h*0.24); c.lineTo(B.x+B.w*0.42,B.y+B.h*0.31); c.stroke();
+        c.beginPath(); c.moveTo(B.x+B.w*0.8,B.y+B.h*0.24); c.lineTo(B.x+B.w*0.58,B.y+B.h*0.31); c.stroke();
+      }
+      // mouth + teeth (count varies per appetite)
       c.fillStyle='#000'; this.rr(c,B.x+B.w*0.25,B.y+B.h*0.62,B.w*0.5,14,7); c.fill();
-      c.fillStyle='#fff'; for(let i=0;i<4;i++) c.fillRect(B.x+B.w*0.28+i*12,B.y+B.h*0.62+2,6,6);
+      c.fillStyle=skin.gear==='voidring'?'#e8dcff':'#fff';
+      const nT=skin.teeth||4;
+      for(let i=0;i<nT;i++) c.fillRect(B.x+B.w*0.28+i*((B.w*0.44)/nT),B.y+B.h*0.62+2,6,6);
       c.restore();
       // name tag
       c.fillStyle='rgba(0,0,0,0.55)'; this.rr(c,B.x-10,B.y-30,B.w+20,20,8); c.fill();
