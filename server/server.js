@@ -105,6 +105,13 @@ const MAX_USERS = 300;
 const MAX_NAME = 24, MAX_PID = 20, MIN_PID = 3, MAX_LEVEL = 50;
 const MAX_SCORE = 100000, MAX_COINS_RUN = 500, MAX_TIME_S = 3600;
 const MAX_RUNS = 40;
+/* PLAYNOVA — RIFTSTRIKE authoritative caps (server is the enforcer). */
+const MAX_FIGHT_LEVEL = 18, MAX_FIGHT_SCORE = 5000000, MAX_FIGHT_COINS = 999999,
+  MAX_FIGHT_TIME_S = 99999, MAX_FIGHT_KILLS = 999999;
+const FIGHT_WEAPONS = new Set(['emberbrand','voltneedle','tidecleaver','stormcaster','frostbow','repeater','wardbell','riftlance']);
+const FIGHT_SKINS = new Set(['ember_apprentice','moss_runner','tideglass_scout','volt_striker','frosthowl_pelt','foundry_plate','gloomwing_cloak','choir_silk','mirror_shard','dawnwarden']);
+const FIGHT_BOSSES = new Set(['cinder_maw','abyssal_choir','stormherald_vex','pale_howl','furnace_twins_a','furnace_twins_b','mirror_of_nyx','riftfather_vaul']);
+const FIGHT_UPS = new Set(['vitality','edge','windstep','focus','stride','surge']);
 const PID_RE = /^[a-z0-9._-]+$/i;
 const PRESET_AVATARS = new Set([
   'nova-star', 'astronaut', 'ringed-planet', 'rocket', 'alien', 'robot',
@@ -631,6 +638,94 @@ function sanitizeLevelRow(r) {
   if (!s && !c && !a && !t) return null;
   return { s, c, a, t };
 }
+/* PLAYNOVA — RIFTSTRIKE saved shape (all values bounds-checked; unknown ids
+ * dropped; equipped must be owned; upgrades 0..5). Rejects live in
+ * validateFighting (400s); this sanitizer is the defense-in-depth clamp. */
+function sanitizeFight(f) {
+  const fb = { level: 0, world: 0, score: 0, coins: 0, time: 0, kills: 0, bosses: [],
+    weapons: ['emberbrand'], skins: ['ember_apprentice'],
+    equippedWeapon: 'emberbrand', equippedSkin: 'ember_apprentice', upgrades: {} };
+  if (!f || typeof f !== 'object') return fb;
+  fb.level = num(f.level, 0, MAX_FIGHT_LEVEL, 0);
+  fb.world = num(f.world, 0, 5, 0);
+  fb.score = num(f.score, 0, MAX_FIGHT_SCORE, 0);
+  fb.coins = num(f.coins, 0, MAX_FIGHT_COINS, 0);
+  let t = Number(f.time);
+  fb.time = (isFinite(t) && t > 0 && t <= MAX_FIGHT_TIME_S) ? Math.round(t * 10) / 10 : 0;
+  fb.kills = num(f.kills, 0, MAX_FIGHT_KILLS, 0);
+  if (Array.isArray(f.bosses)) fb.bosses = f.bosses.filter(b => typeof b === 'string' && FIGHT_BOSSES.has(b)).slice(0, 8);
+  if (Array.isArray(f.weapons)) {
+    const w = f.weapons.filter(w2 => typeof w2 === 'string' && FIGHT_WEAPONS.has(w2)).slice(0, 8);
+    if (w.length) fb.weapons = Array.from(new Set(['emberbrand'].concat(w)));
+  }
+  if (Array.isArray(f.skins)) {
+    const s = f.skins.filter(s2 => typeof s2 === 'string' && FIGHT_SKINS.has(s2)).slice(0, 10);
+    if (s.length) fb.skins = Array.from(new Set(['ember_apprentice'].concat(s)));
+  }
+  if (typeof f.equippedWeapon === 'string' && fb.weapons.indexOf(f.equippedWeapon) >= 0) fb.equippedWeapon = f.equippedWeapon;
+  if (typeof f.equippedSkin === 'string' && fb.skins.indexOf(f.equippedSkin) >= 0) fb.equippedSkin = f.equippedSkin;
+  const ups = {};
+  if (f.upgrades && typeof f.upgrades === 'object') {
+    for (const k of Object.keys(f.upgrades)) {
+      if (!FIGHT_UPS.has(k)) continue;
+      ups[k] = num(f.upgrades[k], 0, 5, 0);
+    }
+  }
+  fb.upgrades = ups;
+  return fb;
+}
+/* Strict validator for the fighting write endpoint: forgeries get 400
+ * (negative coins, impossible levels/scores/times, invalid ids). */
+function validateFighting(body) {
+  body = body || {};
+  const level = parseInt(body.level, 10);
+  if (!isFinite(level) || level < 1 || level > MAX_FIGHT_LEVEL) return { ok: false, error: 'Invalid fighting level.' };
+  const score = Number(body.score), coins = Number(body.coins), time = Number(body.time);
+  if (!isFinite(score) || score < 0 || score > MAX_FIGHT_SCORE) return { ok: false, error: 'Invalid fighting score.' };
+  if (!isFinite(coins) || coins < 0 || coins > MAX_FIGHT_COINS) return { ok: false, error: 'Invalid fighting coins.' };
+  if (!isFinite(time) || time <= 0 || time > MAX_FIGHT_TIME_S) return { ok: false, error: 'Invalid fighting time.' };
+  if (body.world !== undefined) {
+    const w = parseInt(body.world, 10);
+    if (!isFinite(w) || w < 0 || w > 5) return { ok: false, error: 'Invalid fighting world.' };
+  }
+  if (body.kills !== undefined) {
+    const k = Number(body.kills);
+    if (!isFinite(k) || k < 0 || k > MAX_FIGHT_KILLS) return { ok: false, error: 'Invalid kill count.' };
+  }
+  if (body.weapons !== undefined) {
+    if (!Array.isArray(body.weapons) || body.weapons.length > 8 ||
+      body.weapons.some(w => typeof w !== 'string' || !FIGHT_WEAPONS.has(w))) {
+      return { ok: false, error: 'Invalid weapon ids.' };
+    }
+  }
+  if (body.skins !== undefined) {
+    if (!Array.isArray(body.skins) || body.skins.length > 10 ||
+      body.skins.some(s => typeof s !== 'string' || !FIGHT_SKINS.has(s))) {
+      return { ok: false, error: 'Invalid skin ids.' };
+    }
+  }
+  if (body.bosses !== undefined) {
+    if (!Array.isArray(body.bosses) || body.bosses.length > 8 ||
+      body.bosses.some(b => typeof b !== 'string' || !FIGHT_BOSSES.has(b))) {
+      return { ok: false, error: 'Invalid boss ids.' };
+    }
+  }
+  if (body.equippedWeapon !== undefined && (typeof body.equippedWeapon !== 'string' || !FIGHT_WEAPONS.has(body.equippedWeapon))) {
+    return { ok: false, error: 'Invalid equipped weapon.' };
+  }
+  if (body.equippedSkin !== undefined && (typeof body.equippedSkin !== 'string' || !FIGHT_SKINS.has(body.equippedSkin))) {
+    return { ok: false, error: 'Invalid equipped skin.' };
+  }
+  if (body.upgrades !== undefined) {
+    if (!body.upgrades || typeof body.upgrades !== 'object' || Array.isArray(body.upgrades)) return { ok: false, error: 'Invalid upgrades.' };
+    for (const k of Object.keys(body.upgrades)) {
+      if (!FIGHT_UPS.has(k)) return { ok: false, error: 'Invalid upgrade id.' };
+      const v = Number(body.upgrades[k]);
+      if (!isFinite(v) || v < 0 || v > 5) return { ok: false, error: 'Invalid upgrade rank.' };
+    }
+  }
+  return { ok: true, level };
+}
 function sanitizeUser(u) {
   if (!u || typeof u !== 'object') return null;
   const id = String(u.id || '');
@@ -685,6 +780,7 @@ function sanitizeUser(u) {
     totalCoins: num(u.totalCoins, 0, 50000000, 0),
     levels,
     runs,
+    fight: sanitizeFight(u.fight),
   };
 }
 function sanitizeDoc(doc) {
@@ -715,6 +811,7 @@ function publicUser(u) {
     createdAt: u.createdAt, updatedAt: u.updatedAt,
     totalCoins: u.totalCoins, levelsCompleted: lv, totalScore: score,
     levels: u.levels,
+    fight: { score: (u.fight && u.fight.score) || 0, bosses: ((u.fight && u.fight.bosses) || []).length, kills: (u.fight && u.fight.kills) || 0, level: (u.fight && u.fight.level) || 0 },
   };
 }
 /* Owner shape: everything the owner's own devices need, NEVER secretHash,
@@ -727,6 +824,7 @@ function ownerUser(u) {
     id: u.id, privateId: u.privateId, name: u.name, avatar: u.avatar,
     createdAt: u.createdAt, updatedAt: u.updatedAt, seenAt: u.seenAt,
     totalCoins: u.totalCoins, levels: u.levels,
+    fight: sanitizeFight(u.fight),
     hasPassword: !!u.passwordHash,
   };
 }
@@ -779,6 +877,47 @@ function applyAttempt(user, level) {
   const row = user.levels[String(level)] || { s: 0, c: 0, a: 0, t: 0 };
   row.a = Math.min(1000000, row.a + 1);
   user.levels[String(level)] = row;
+  user.seenAt = Date.now();
+  return user;
+}
+/* PLAYNOVA — RIFTSTRIKE merge (max-wins for score/kills/level; union for
+ * unlocks; equipped must be owned; upgrades max-wins per track). */
+function applyFighting(user, data) {
+  const cur = sanitizeFight(user.fight);
+  const lvl = Math.min(MAX_FIGHT_LEVEL, Math.max(1, parseInt(data.level, 10) || 0));
+  if (lvl > cur.level) cur.level = lvl;
+  const score = num(data.score, 0, MAX_FIGHT_SCORE, 0);
+  if (score > cur.score) cur.score = score;
+  const kills = num(data.kills, 0, MAX_FIGHT_KILLS, 0);
+  if (kills > cur.kills) cur.kills = kills;
+  const coins = num(data.coins, 0, MAX_FIGHT_COINS, 0);
+  if (coins > cur.coins) cur.coins = coins;
+  let t = Number(data.time);
+  t = (isFinite(t) && t > 0 && t <= MAX_FIGHT_TIME_S) ? Math.round(t * 10) / 10 : 0;
+  if (t > 0 && (cur.time <= 0 || t < cur.time)) cur.time = t;
+  if (data.world !== undefined) {
+    const w = Math.min(5, Math.max(0, parseInt(data.world, 10) || 0));
+    if (w > cur.world) cur.world = w;
+  }
+  for (const arr of [['bosses', FIGHT_BOSSES, 8], ['weapons', FIGHT_WEAPONS, 8], ['skins', FIGHT_SKINS, 10]]) {
+    const key = arr[0], allow = arr[1], cap = arr[2];
+    if (Array.isArray(data[key])) {
+      const set = new Set(cur[key]);
+      for (const v of data[key]) if (typeof v === 'string' && allow.has(v)) set.add(v);
+      cur[key] = Array.from(set).slice(0, cap);
+    }
+  }
+  if (typeof data.equippedWeapon === 'string' && cur.weapons.indexOf(data.equippedWeapon) >= 0) cur.equippedWeapon = data.equippedWeapon;
+  if (typeof data.equippedSkin === 'string' && cur.skins.indexOf(data.equippedSkin) >= 0) cur.equippedSkin = data.equippedSkin;
+  if (data.upgrades && typeof data.upgrades === 'object') {
+    for (const k of Object.keys(data.upgrades)) {
+      if (!FIGHT_UPS.has(k)) continue;
+      const v = num(data.upgrades[k], 0, 5, 0);
+      if (v > (cur.upgrades[k] || 0)) cur.upgrades[k] = v;
+    }
+  }
+  user.fight = cur;
+  user.updatedAt = Date.now();
   user.seenAt = Date.now();
   return user;
 }
@@ -1071,6 +1210,32 @@ async function handleCompletion(req, res, cors, id, body) {
   }
 }
 
+/* PLAYNOVA — RIFTSTRIKE progress write (owner only, validated server-side). */
+async function handleFighting(req, res, cors, id, body) {
+  const hasSessionToken = !!extractSessionToken(req, body);
+  const hasLegacySecret = !!String((body || {}).secret || req.headers['x-profile-secret'] || '');
+  if (!hasSessionToken && !hasLegacySecret) { sendJson(res, 401, { error: 'Missing profile credentials.' }, cors); return; }
+  const v = validateFighting(body || {});
+  if (!v.ok) { sendJson(res, 400, { error: v.error }, cors); return; }
+  try {
+    let fight = null;
+    await withProfilesLock(async () => {
+      const doc = await getProfilesDoc();
+      const { user: u } = resolveOwner(doc, id, req, body);
+      applyFighting(u, body || {});
+      await mantlePost(profilesUrl(), doc);
+      fight = sanitizeFight(u.fight);
+    });
+    sendJson(res, 200, { ok: true, fight }, cors);
+  } catch (e) {
+    if (e && (e.status === 401 || e.status === 403 || e.status === 404)) {
+      sendJson(res, e.status, { error: e.message }, cors);
+      return;
+    }
+    throw e;
+  }
+}
+
 /* ---------------- authentication (password + sessions) -------------- */
 /* Sign-up: display name + private ID + avatar + password. Private ID
  * uniqueness is case-insensitive. Returns the owner record plus BOTH a
@@ -1327,7 +1492,7 @@ function route(req, res) {
         const setId = decodeURIComponent(setM[1]);
         return handleAuthSetPassword(req, res, cors, setId, body);
       }
-      let m = pathname.match(/^\/api\/profiles\/([^/]+)(\/(attempt|completion))?$/);
+      let m = pathname.match(/^\/api\/profiles\/([^/]+)(\/(attempt|completion|fighting))?$/);
       if (m) {
         const id = decodeURIComponent(m[1]);
         if (!/^p_[a-z0-9_]+$/i.test(id) || id.length > 64) {
@@ -1338,6 +1503,7 @@ function route(req, res) {
         if (method === 'PATCH' && !m[2]) return handleProfilePatch(req, res, cors, id, body);
         if (method === 'POST' && m[3] === 'attempt') return handleAttempt(req, res, cors, id, body);
         if (method === 'POST' && m[3] === 'completion') return handleCompletion(req, res, cors, id, body);
+        if (method === 'POST' && m[3] === 'fighting') return handleFighting(req, res, cors, id, body);
       }
       sendJson(res, 404, { error: 'Not found.' }, cors);
     } catch (e) {

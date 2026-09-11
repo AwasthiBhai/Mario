@@ -7,16 +7,16 @@
 /* STARBOUND — apply stored/system theme before paint (no flash). */
 (function(){try{var k='starboundThemeV1';var m=null;try{m=localStorage.getItem(k);}catch(e){}if(m!=='light'&&m!=='dark'){try{m=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}catch(e){m='dark';}if(!m)m='dark';}document.documentElement.setAttribute('data-theme',m);}catch(e){try{document.documentElement.setAttribute('data-theme','dark');}catch(_){}}})();
 </script>
-<title>STARBOUND — BundLal Studios</title>
-<meta name="description" content="STARBOUND by BundLal Studios — a 50-level 2D platform adventure. Light every beacon. Reclaim the sky.">
+<title>PLAYNOVA — BundLal Studios | STARBOUND + RIFTSTRIKE</title>
+<meta name="description" content="PLAYNOVA by BundLal Studios — a multi-game browser arcade. Play STARBOUND (50-level platform adventure) and RIFTSTRIKE (2D action fighter). Free in your browser.">
 <meta name="theme-color" content="#000000">
 <meta property="og:type" content="website">
-<meta property="og:title" content="STARBOUND — BundLal Studios">
-<meta property="og:description" content="STARBOUND: a 50-level 2D platform adventure by BundLal Studios. Light every beacon. Reclaim the sky. Free in your browser.">
+<meta property="og:title" content="PLAYNOVA — BundLal Studios">
+<meta property="og:description" content="PLAYNOVA: STARBOUND platform adventure + RIFTSTRIKE action fighter. Two adventures. One arcade. Free in your browser.">
 <meta property="og:image" content="./favicon.png">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="STARBOUND — BundLal Studios">
-<meta name="twitter:description" content="50 levels · 10 worlds · 10 bosses. STARBOUND, an original browser platformer by BundLal Studios.">
+<meta name="twitter:title" content="PLAYNOVA — BundLal Studios">
+<meta name="twitter:description" content="STARBOUND platformer + RIFTSTRIKE fighter. Two adventures. One arcade.">
 <link rel="icon" type="image/png" href="./favicon.png">
 <link rel="apple-touch-icon" href="./favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -32,8 +32,10 @@
   <div class="intro-center">
     <div id="introStudio" class="intro-studio">BundLal Studios <span>Presents</span></div>
     <div id="introLogo" class="intro-logo hidden">
-      <img class="intro-logo-img" src="./favicon.png" alt="STARBOUND logo" width="500" height="500">
-      <div class="intro-tagline">LIGHT EVERY BEACON · RECLAIM THE SKY</div>
+      <img class="intro-logo-img" src="./favicon.png" alt="PLAYNOVA logo" width="500" height="500">
+      <div id="introBrandName" class="intro-brand">PLAYNOVA</div>
+      <div class="intro-tagline">TWO ADVENTURES · ONE ARCADE</div>
+      <div id="introGameLine" class="intro-gameline">✦ STARBOUND ✦ &nbsp;·&nbsp; ⚔ RIFTSTRIKE ⚔</div>
     </div>
     <div id="introClick" class="intro-click hidden">
       <div class="click-pulse"></div>
@@ -50,7 +52,7 @@
 <div id="loader" class="loader hidden">
   <div class="loader-card">
     <img class="loader-logo-img" src="./favicon.png" alt="STARBOUND logo" width="500" height="500">
-    <div class="loader-logo">✦ STARBOUND ✦</div>
+    <div class="loader-logo">✦ PLAYNOVA ✦</div>
     <div class="loader-bar"><div id="loaderFill" class="loader-fill"></div></div>
     <p id="loaderTip" class="loader-tip">Tip: Stomp critters to bounce high.</p>
   </div>
@@ -59,13 +61,26 @@
 <!-- ============ SITE HEADER ============ -->
 <header id="siteHeader" class="site-header">
   <a class="brand" href="#home" data-nav="home">
-    <img class="brand-logo" src="./favicon.png" alt="STARBOUND logo" width="500" height="500">
-    <span class="brand-text"><strong>STARBOUND</strong><em class="brand-tagline">BUNDLAL STUDIOS</em></span>
+    <img class="brand-logo" src="./favicon.png" alt="PLAYNOVA logo" width="500" height="500">
+    <span class="brand-text"><strong>PLAYNOVA</strong><em class="brand-tagline">BUNDLAL STUDIOS</em></span>
   </a>
   <nav class="site-nav" aria-label="Main">
     <button data-nav="home" class="nav-link active">Home</button>
-    <button data-nav="game" class="nav-link">Game</button>
-    <button data-nav="levels" class="nav-link">Levels</button>
+    <div class="nav-drop" data-drop="games">
+      <button class="nav-link nav-drop-btn" data-nav="games" aria-haspopup="true" aria-expanded="false">Games ▾</button>
+      <div class="nav-menu" role="menu" aria-label="Games">
+        <button data-nav="games" class="nav-menu-head">All games →</button>
+        <button data-nav="game" data-game-goto="platformer" role="menuitem"><strong>✦ STARBOUND</strong><small>Platformer · 50 levels</small></button>
+        <button data-nav="fighting" data-game-goto="fighting" role="menuitem"><strong>⚔ RIFTSTRIKE</strong><small>Action · 6 worlds</small></button>
+      </div>
+    </div>
+    <div class="nav-drop" data-drop="progress">
+      <button class="nav-link nav-drop-btn" data-nav="progress-starbound" aria-haspopup="true" aria-expanded="false">Progress ▾</button>
+      <div class="nav-menu" role="menu" aria-label="Progress">
+        <button data-nav="progress-starbound" role="menuitem"><strong>✦ STARBOUND</strong><small>Levels · coins · relics</small></button>
+        <button data-nav="progress-fighting" role="menuitem"><strong>⚔ RIFTSTRIKE</strong><small>Worlds · kills · bosses</small></button>
+      </div>
+    </div>
     <button data-nav="leaderboard" class="nav-link">Leaderboard</button>
     <button data-nav="reviews" class="nav-link">Reviews</button>
     <button data-nav="profile" class="nav-link">Profile</button>
@@ -81,8 +96,13 @@
   </div>
 </header>
 <div id="mobileNav" class="mobile-nav hidden">
-  <button data-nav="home">Home</button><button data-nav="game">Game</button>
-  <button data-nav="levels">Levels</button><button data-nav="leaderboard">Leaderboard</button>
+  <button data-nav="home">Home</button>
+  <button data-nav="games">🎮 Games</button>
+  <button data-nav="game">✦ STARBOUND — Play</button>
+  <button data-nav="fighting">⚔ RIFTSTRIKE — Play</button>
+  <button data-nav="progress-starbound">📊 Progress · STARBOUND</button>
+  <button data-nav="progress-fighting">📊 Progress · RIFTSTRIKE</button>
+  <button data-nav="leaderboard">Leaderboard</button>
   <button data-nav="reviews">Reviews</button><button data-nav="profile">Profile</button>
   <button data-nav="settings">Settings</button><button data-nav="credits">Credits</button>
   <button data-nav="about">About</button>
@@ -96,19 +116,18 @@
     <div class="hero-inner">
       <div class="hero-copy">
         <div class="eyebrow">✦ BundLal Studios presents ✦</div>
-        <h1 class="hero-title-starbound">STARBOUND</h1>
-        <p class="hero-tagline">Light every beacon. Reclaim the sky.</p>
-        <p class="hero-sub">A 50-level platform adventure across 10 handcrafted worlds.</p>
-        <p class="hero-desc">Play <strong>Pip</strong>, a lantern-fox cub. Run, bounce, outwit 7 critter species, dodge hazards, find secret relics, topple 10 bosses — and face the <strong>Voidstar</strong> in Level 50.</p>
+        <h1 class="hero-title-starbound hero-title-nova">PLAYNOVA</h1>
+        <p class="hero-tagline">Two adventures. One arcade.</p>
+        <p class="hero-sub">STARBOUND platform odyssey + RIFTSTRIKE arena fighter — free in your browser.</p>
+        <p class="hero-desc">Light 50 beacons as <strong>Pip</strong> the lantern-fox — then grab a blade as <strong>Nyx</strong> the rift-warden and carve through 6 shattered worlds, 8 forged weapons and 8 warlords.</p>
         <div class="hero-cta">
-          <button class="btn btn-gold btn-lg" data-action="play">▶ Play Now</button>
-          <button class="btn btn-ghost btn-lg" data-action="continue">Continue</button>
-          <button class="btn btn-ghost btn-lg" data-action="newgame">New Game</button>
+          <button class="btn btn-gold btn-lg" data-nav="games">▶ Play</button>
+          <button class="btn btn-ghost btn-lg" data-nav="games">Explore Games</button>
         </div>
         <div class="hero-stats" id="heroStats">
-          <div><strong id="statProgress">0/50</strong><span>levels cleared</span></div>
+          <div><strong id="statProgress">0/50</strong><span>beacons lit</span></div>
           <div><strong id="statCoins">0</strong><span>star shards</span></div>
-          <div><strong id="statRelics">0/50</strong><span>relics</span></div>
+          <div><strong id="statFight">0/8</strong><span>warlords felled</span></div>
         </div>
       </div>
       <div class="hero-art" aria-hidden="true">
@@ -125,8 +144,40 @@
   </div>
 
   <div class="section wrap">
+    <h2>Featured Games <small>pick your adventure</small></h2>
+    <div id="featuredGames" class="game-cards">
+      <article class="game-card" data-goto="platformer" tabindex="0" role="button" aria-label="Play STARBOUND">
+        <div class="game-card-art art-starbound" aria-hidden="true"><span class="gc-ico">✦</span><span class="gc-fox"></span><i></i><i></i><i></i></div>
+        <div class="game-card-body">
+          <div class="gc-tags"><span>Platformer</span><span>Cozy-hard</span></div>
+          <h3>✦ STARBOUND</h3>
+          <p>Light every beacon. Reclaim the sky. 50 levels · 10 worlds · 10 bosses as Pip the lantern-fox.</p>
+          <div class="gc-meta"><span>★ 50 levels</span><span>💾 Auto-save</span><span>🎮 Keyboard · Touch · Pad</span></div>
+          <div class="gc-actions"><button class="btn btn-gold" data-nav="game">Play Now →</button><button class="btn btn-ghost btn-sm" data-nav="progress-starbound">View Progress</button></div>
+        </div>
+      </article>
+      <article class="game-card" data-goto="fighting" tabindex="0" role="button" aria-label="Play RIFTSTRIKE">
+        <div class="game-card-art art-rift" aria-hidden="true"><span class="gc-ico">⚔</span><span class="gc-slash"></span><i></i><i></i><i></i></div>
+        <div class="game-card-body">
+          <div class="gc-tags"><span>Action / Combat</span><span>Challenging</span></div>
+          <h3>⚔ RIFTSTRIKE</h3>
+          <p>Seal the Rift. Fell 8 warlords across 6 shattered worlds. 8 weapons · 10 skins · upgrades.</p>
+          <div class="gc-meta"><span>⚔ 8 weapons</span><span>👾 8 enemies + elites</span><span>📱 Mobile ready</span></div>
+          <div class="gc-actions"><button class="btn btn-gold" data-nav="fighting">Play Now →</button><button class="btn btn-ghost btn-sm" data-nav="progress-fighting">View Progress</button></div>
+        </div>
+      </article>
+    </div>
+  </div>
+
+  <div class="section wrap">
+    <h2>Your Progress <small>synced when signed in · guest play stays on this device</small></h2>
+    <div id="homeProgress" class="prog-cards"></div>
+  </div>
+
+  <div class="section wrap">
     <h2>✦ Features ✦</h2>
     <div class="cards">
+      <div class="card"><div class="card-ico">🎮</div><h3>Multiple Games</h3><p>One account, one arcade — STARBOUND platforming and RIFTSTRIKE combat with separate saves and dashboards.</p></div>
       <div class="card"><div class="card-ico">🌍</div><h3>50 Levels · 10 Worlds</h3><p>Meadows, caverns, dunes, peaks, treetops, reefs, skies, magma, ruins and the Starfall Citadel — each with unique art, music, hazards and secrets.</p></div>
       <div class="card"><div class="card-ico">🦊</div><h3>Original Hero: Pip</h3><p>A lantern-fox cub with buttery acceleration, variable jumps, wall forgiveness, 10 animation states and 5 power-ups.</p></div>
       <div class="card"><div class="card-ico">👾</div><h3>7 Critters + 10 Bosses</h3><p>Walkers, sprinters, flyers, hoppers, shelled brutes, spitters and patrollers — plus a multi-phase final boss: the Voidstar.</p></div>
@@ -138,14 +189,14 @@
 
   <div class="section wrap split">
     <div>
-      <h2>Meet Pip 🦊</h2>
+      <h2>Meet Pip 🦊 & Nyx ⚔</h2>
       <p><strong>Pip</strong> is the last lantern-fox of Ember Meadow. When the Voidstar swallowed the sky-lanterns, Pip lit one small ember and set out across the Aether to rekindle all 50 beacons.</p>
+      <p><strong>Nyx</strong> is a rift-warden of the Shattered Span. When the Rift tore six worlds open, Nyx forged ember-blades and stormcasters to fell 8 warlords and seal it shut.</p>
       <ul class="ticks">
-        <li>Idle · Walk · Run · Jump · Fall · Hurt · Death · Victory · Starbolt</li>
-        <li>Power-ups: Heartberry · Aether Shield · Swiftleaf · Springshroom · Starbolt</li>
-        <li>Personality: brave, bouncy, snack-motivated</li>
+        <li>Pip: run · bounce · starbolt · shield — brave, bouncy, snack-motivated</li>
+        <li>Nyx: slash · dash · volley · wardburst — calm, relentless, scarred</li>
       </ul>
-      <button class="btn btn-gold" data-action="play">Start the adventure</button>
+      <div class="row2"><button class="btn btn-gold" data-nav="game">Play STARBOUND</button><button class="btn btn-ghost" data-nav="fighting">Play RIFTSTRIKE</button></div>
     </div>
     <div class="pip-showcase"><div class="pip-fox big"><div class="pip-ear l"></div><div class="pip-ear r"></div><div class="pip-face"><div class="pip-eye l"></div><div class="pip-eye r"></div><div class="pip-nose"></div></div><div class="pip-tail"></div><div class="pip-lantern"></div></div>
       <div class="chips"><span>🏃 run</span><span>🦘 bounce</span><span>✦ starbolt</span><span>🛡 shield</span></div>
@@ -159,8 +210,8 @@
 
   <div class="section wrap split">
     <div class="card glow">
-      <h3>About the game</h3>
-      <p><strong>STARBOUND</strong> is a complete browser platformer built with canvas, vanilla JS modules and generative audio. No downloads — play instantly, keep progress on this device, or create a free global profile to sync records and climb the worldwide leaderboard.</p>
+      <h3>About the platform</h3>
+      <p><strong>PLAYNOVA</strong> is a multi-game browser arcade by BundLal Studios: <strong>STARBOUND</strong> (50-level platformer) and <strong>RIFTSTRIKE</strong> (6-world action fighter). No downloads — play instantly, keep progress on this device, or create a free global profile to sync records and climb the worldwide leaderboard.</p>
       <h3>Studio</h3>
       <p><strong>BundLal Studios</strong> — small team, big skies. We make cozy-but-challenging adventures with original art, music and code.</p>
       <button class="btn btn-gold btn-sm" data-nav="about">More about →</button>
@@ -275,12 +326,135 @@
   </div>
 </section>
 
-<!-- ============ LEVELS ============ -->
+<!-- ============ LEVELS (legacy view kept for compatibility) ============ -->
 <section id="view-levels" class="view">
   <div class="wrap">
-    <h2>Level Select <small>50 levels · 10 worlds</small></h2>
+    <h2>Level Select <small>STARBOUND · 50 levels · 10 worlds</small></h2>
     <p class="muted">Clear a level to unlock the next. Boss levels glow red. ★ = relic found.</p>
     <div id="levelWorlds"></div>
+  </div>
+</section>
+
+<!-- ============ GAMES HUB (/games) ============ -->
+<section id="view-games" class="view">
+  <div class="wrap">
+    <div class="games-hero">
+      <div class="eyebrow">✦ PLAYNOVA arcade ✦</div>
+      <h2>Games <small>two adventures · one account</small></h2>
+      <p class="muted">A cozy-hard platform odyssey and a rift-forged action fighter. Same profile, separate saves, synced progress when signed in.</p>
+    </div>
+    <div id="gamesGrid" class="game-cards"></div>
+    <div class="card glow games-note">
+      <h3>How saves work</h3>
+      <p class="muted">Guests can play everything — progress stays on this device for the visit. <strong>Create a free account</strong> to sync both games to the cloud, keep bests across devices, and submit reviews.</p>
+      <div class="row2"><button class="btn btn-gold btn-sm" data-nav="profile">Create free account</button><button class="btn btn-ghost btn-sm" data-nav="progress-starbound">View progress</button></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ RIFTSTRIKE (new fighting/action game) ============ -->
+<section id="view-fighting" class="view">
+  <div class="wrap game-layout fight-layout">
+    <div class="game-shell">
+      <div class="game-topbar">
+        <button class="btn btn-ghost btn-sm" data-nav="games">← Games</button>
+        <div class="game-title" id="fightTitleLabel">RIFTSTRIKE · Shattered Span</div>
+        <div class="game-top-actions">
+          <button id="fightPauseTop" class="icon-btn" title="Pause">⏸</button>
+          <button id="fightMute" class="icon-btn" title="Mute">🔊</button>
+          <button id="fightFull" class="icon-btn" title="Fullscreen">⛶</button>
+        </div>
+      </div>
+      <div class="canvas-wrap" id="fightWrap">
+        <canvas id="fightGame" width="960" height="540"></canvas>
+        <div id="fightHud" class="hud fight-hud">
+          <div class="hud-left">
+            <span class="hud-pill" id="fightHp">❤ 100</span>
+            <span class="hud-pill hud-sec" id="fightEn">⚡ 100</span>
+            <span class="hud-pill" id="fightWeapon">🗡 Emberbrand</span>
+            <span class="hud-pill hud-sec" id="fightDash">💨 ready</span>
+          </div>
+          <div class="hud-right">
+            <span class="hud-pill">🪙 <b id="fightCoins">0</b></span>
+            <span class="hud-pill">★ <b id="fightScore">0</b></span>
+            <button id="fightPauseHud" class="hud-pill hud-btn" title="Pause menu" aria-label="Open pause menu">⏸</button>
+          </div>
+        </div>
+        <div id="fightBossBar" class="boss-bar hidden"><span id="fightBossName">Warlord</span><div class="boss-track"><div id="fightBossFill"></div></div></div>
+        <div id="fightTouch" class="touch fight-touch">
+          <div class="t-left"><button data-f="left" aria-label="Move left">◀</button><button data-f="right" aria-label="Move right">▶</button></div>
+          <div class="t-mid"><button data-f="wprev" aria-label="Previous weapon">⚔−</button><button data-f="wnext" aria-label="Next weapon">⚔+</button></div>
+          <div class="t-right"><button data-f="jump" aria-label="Jump">▲</button><button data-f="atk" aria-label="Attack">✦</button><button data-f="dash" aria-label="Dash">💨</button><button data-f="spec" aria-label="Special">★</button></div>
+        </div>
+        <div id="fightToast" class="toast toast-game" role="status" aria-live="polite"></div>
+        <div id="fightMenu" class="overlay">
+          <div class="panel menu-panel fight-menu-panel">
+            <div class="mini-logo">⚔ RIFTSTRIKE ⚔</div>
+            <div class="muted"><small>Seal the Rift · Fell the warlords</small></div>
+            <div class="fight-tabs" role="tablist" aria-label="RIFTSTRIKE menu">
+              <button data-ftab="play" class="on">Play</button><button data-ftab="skins">Skins</button><button data-ftab="weapons">Weapons</button><button data-ftab="upgrades">Upgrades</button><button data-ftab="help">Help</button>
+            </div>
+            <div id="fightTabBody"></div>
+          </div>
+        </div>
+        <div id="fightPause" class="overlay hidden">
+          <div class="panel"><h2>⏸ Paused</h2>
+            <button class="btn btn-gold btn-block" id="fightResume">▶ RESUME</button>
+            <button class="btn btn-ghost btn-block" id="fightRestart">↻ RESTART LEVEL</button>
+            <button class="btn btn-ghost btn-block" id="fightQuit">⚔ WORLD SELECT</button>
+            <div class="row2"><button class="btn btn-ghost" data-nav="games">GAMES</button><button class="btn btn-ghost" data-nav="home">⌂ HOME</button></div>
+          </div>
+        </div>
+        <div id="fightOver" class="overlay hidden">
+          <div class="panel"><h2>💀 WARDEN DOWN</h2><p class="muted" id="fightOverText">The Rift keeps what it catches.</p>
+            <button class="btn btn-gold btn-block" id="fightRetry">↻ RESPAWN AT CHECKPOINT</button>
+            <div class="row2"><button class="btn btn-ghost" id="fightOverMenu">MENU</button><button class="btn btn-ghost" data-nav="games">GAMES</button></div>
+          </div>
+        </div>
+        <div id="fightWin" class="overlay hidden">
+          <div class="panel"><h2 id="fightWinTitle">✦ LEVEL CLEAR ✦</h2>
+            <div id="fightWinStats" class="stat-grid"></div>
+            <div id="fightWinUnlock" class="newbest hidden"></div>
+            <button class="btn btn-gold btn-block" id="fightNext">NEXT →</button>
+            <div class="row2"><button class="btn btn-ghost" id="fightReplay">REPLAY</button><button class="btn btn-ghost" id="fightWinMenu">MENU</button></div>
+          </div>
+        </div>
+      </div>
+      <p class="hint">Desktop: A/D move · Space/W jump · J attack · K ranged/special · Shift dash · 1-8 / Q/E weapons · Esc pause. Mobile: on-screen buttons.</p>
+    </div>
+    <aside class="game-side">
+      <details class="card game-acc" open><summary><span class="acc-title">This run</span><span class="acc-chev" aria-hidden="true">▾</span></summary><div id="fightInfo" class="muted">—</div></details>
+      <details class="card game-acc" open><summary><span class="acc-title">Controls</span><span class="acc-chev" aria-hidden="true">▾</span></summary><div class="muted"><small>Move A/D or ←/→ · Jump Space/W/↑ · Attack J/Z · Special K/X · Dash Shift/L · Weapons 1–8 or Q/E · Pause Esc/P. Touch: left pad moves, right pad fights.</small></div></details>
+      <details class="card game-acc" open><summary><span class="acc-title">Progress</span><span class="acc-chev" aria-hidden="true">▾</span></summary><div id="fightSide" class="muted">—</div>
+        <button class="btn btn-gold btn-sm" data-nav="progress-fighting">Open dashboard</button></details>
+    </aside>
+  </div>
+</section>
+
+<!-- ============ PROGRESS · STARBOUND ============ -->
+<section id="view-progress-starbound" class="view">
+  <div class="wrap">
+    <h2>Progress · ✦ STARBOUND <small>platformer journey</small></h2>
+    <p class="muted">Current level · unlocked · completed · coins · relics · per-level bests. Gameplay system unchanged — now housed under Progress.</p>
+    <div id="platProgressCards" class="stat-cards"></div>
+    <h3>Levels</h3>
+    <div id="platProgressWorlds"></div>
+    <div class="center"><button class="btn btn-gold" data-nav="game">▶ Play STARBOUND</button></div>
+  </div>
+</section>
+
+<!-- ============ PROGRESS · RIFTSTRIKE ============ -->
+<section id="view-progress-fighting" class="view">
+  <div class="wrap">
+    <h2>Progress · ⚔ RIFTSTRIKE <small>warden record</small></h2>
+    <p class="muted" id="fightProgressNote">Separate save — never touches STARBOUND progress.</p>
+    <div id="fightProgressCards" class="stat-cards"></div>
+    <div class="prog-grid">
+      <div class="card"><h3>🏆 Achievements</h3><div id="fightAch"></div></div>
+      <div class="card"><h3>🗡 Arsenal</h3><div id="fightArsenal"></div></div>
+      <div class="card"><h3>🎨 Wardrobe</h3><div id="fightWardrobe"></div></div>
+    </div>
+    <div class="center row2c"><button class="btn btn-gold" data-nav="fighting">▶ Play RIFTSTRIKE</button><button class="btn btn-ghost" data-nav="games">All games</button></div>
   </div>
 </section>
 
@@ -414,8 +588,8 @@
 
 <footer class="footer">
   <div class="wrap foot-grid">
-    <div><img class="foot-logo-img" src="./favicon.png" alt="STARBOUND logo" width="500" height="500"><strong>✦ STARBOUND</strong><br><span class="muted">Light every beacon. Reclaim the sky. · © 2026 BundLal Studios. All original content.</span></div>
-    <div class="foot-links"><button data-nav="game">Play</button><button data-nav="levels">Levels</button><button data-nav="leaderboard">Leaderboard</button><button data-nav="reviews">Reviews</button><button data-nav="profile">Profile</button><button data-nav="settings">Settings</button><button data-nav="credits">Credits</button></div>
+    <div><img class="foot-logo-img" src="./favicon.png" alt="PLAYNOVA logo" width="500" height="500"><strong>✦ PLAYNOVA</strong><br><span class="muted">Two adventures. One arcade. · © 2026 BundLal Studios. All original content.</span></div>
+    <div class="foot-links"><button data-nav="games">Games</button><button data-nav="progress-starbound">Progress · STARBOUND</button><button data-nav="progress-fighting">Progress · RIFTSTRIKE</button><button data-nav="profile">Profile</button><button data-nav="reviews">Reviews</button><button data-nav="about">About</button><button data-nav="settings">Settings</button><button data-nav="credits">Credits</button></div>
   </div>
 </footer>
 
@@ -471,6 +645,10 @@
 <script src="js/profiles.js?v=13"></script>
 <script src="js/avatars.js?v=12"></script>
 <script src="js/input.js?v=12"></script>
+<script src="js/fight-data.js?v=1"></script>
+<script src="js/fight-save.js?v=1"></script>
+<script src="js/fight-engine.js?v=1"></script>
+<script src="js/fight-ui.js?v=1"></script>
 <script src="js/levels.js?v=16"></script>
 <script src="js/engine.js?v=16"></script>
 <script src="js/ui.js?v=12"></script>

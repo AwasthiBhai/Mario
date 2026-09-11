@@ -920,6 +920,54 @@
         });
     },
 
+    /* ---- RIFTSTRIKE sync (PLAYNOVA: separate progression, same account) --
+     * Guests never call this (RS_Save guards). Best-effort: never throws. */
+    recordFighting: function(payload){
+      var s = loadSession();
+      var a = loadAuth();
+      if(a && !authValid(a)){ clearAuth(); a = null; }
+      if(!s && !a) return Promise.resolve({ ok: false, error: 'no-account' });
+      var myId = (a && a.id) || s.id;
+      payload = payload || {};
+      var body = {
+        level: parseInt(payload.level, 10) || 1,
+        world: parseInt(payload.world, 10) || 0,
+        score: Math.floor(Number(payload.score) || 0),
+        coins: Math.floor(Number(payload.coins) || 0),
+        time: Number(payload.time) || 0,
+        kills: Math.floor(Number(payload.kills) || 0),
+        bosses: Array.isArray(payload.bosses) ? payload.bosses.slice(0, 8) : [],
+        weapons: Array.isArray(payload.weapons) ? payload.weapons.slice(0, 8) : undefined,
+        skins: Array.isArray(payload.skins) ? payload.skins.slice(0, 10) : undefined,
+        equippedWeapon: payload.equippedWeapon,
+        equippedSkin: payload.equippedSkin,
+        upgrades: payload.upgrades
+      };
+      var opts = { method: 'POST', body: body };
+      if(s){ body.secret = s.secret; opts.secret = s.secret; }
+      if(a){ body.sessionToken = a.token; opts.token = a.token; }
+      return fetchJson('/api/profiles/' + encodeURIComponent(myId) + '/fighting', opts)
+        .then(function(res){ return { ok: true, fight: res && res.fight }; })
+        .catch(function(err){
+          if(err && (err.status === 403 || err.status === 404)) return { ok: false, error: 'forbidden' };
+          return { ok: false, error: friendlyError(err, 'save') };
+        });
+    },
+
+    loadFighting: function(){
+      var s = loadSession();
+      var a = loadAuth();
+      if(a && !authValid(a)){ clearAuth(); a = null; }
+      if(!s && !a) return Promise.resolve(null);
+      var p;
+      if(a) p = fetchJson('/api/auth/session', { token: a.token });
+      else p = fetchJson('/api/profiles/me?id=' + encodeURIComponent(s.id), { secret: s.secret });
+      return p.then(function(r){
+        if(r && r.user && r.user.fight) return r.user.fight;
+        return null;
+      }).catch(function(){ return null; });
+    },
+
     /* Retry queued offline ops, oldest first. Never throws. Permanent
        4xx failures are dropped; network failures stay queued. */
     flushOutbox: function(){

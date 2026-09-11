@@ -129,7 +129,28 @@
       }catch(e){}
     },
     bindNav(){
-      $$('[data-nav]').forEach(b=>b.addEventListener('click',()=>{ SP_Audio.init(SP_Save.data.settings); SP_Audio.resume(); SP_Audio.sfx('click'); this.show(b.getAttribute('data-nav')); }));
+      $$('[data-nav]').forEach(b=>{ if(b._navBound) return; b._navBound=true; b.addEventListener('click',()=>{ SP_Audio.init(SP_Save.data.settings); SP_Audio.resume(); SP_Audio.sfx('click'); this.show(b.getAttribute('data-nav')); }); });
+      // PLAYNOVA: nav dropdowns (desktop hover + touch toggle; never hover-only)
+      $$('.nav-drop').forEach(drop=>{
+        const btn=drop.querySelector('.nav-drop-btn');
+        if(!btn) return;
+        drop.addEventListener('mouseenter',()=>{ if(window.matchMedia&&window.matchMedia('(hover:hover)').matches) drop.classList.add('open'); });
+        drop.addEventListener('mouseleave',()=>drop.classList.remove('open'));
+        // Long-press/right affordance: double-click toggles menu without navigating.
+        btn.addEventListener('dblclick',e=>{ e.preventDefault(); e.stopPropagation(); drop.classList.toggle('open'); });
+        drop.querySelectorAll('.nav-menu button').forEach(mi=>mi.addEventListener('click',()=>drop.classList.remove('open')));
+        btn.addEventListener('focus',()=>drop.classList.add('open'));
+        drop.addEventListener('focusout',e=>{ if(!drop.contains(e.relatedTarget)) drop.classList.remove('open'); });
+      });
+      // PLAYNOVA: deep-link hash routes (#/games, #/games/platformer, ...)
+      window.addEventListener('hashchange',()=>this._fromHash());
+      // PLAYNOVA: home featured cards
+      $$('.game-card[data-goto]').forEach(card=>{
+        if(card._gotoBound) return; card._gotoBound=true;
+        const go=()=>{ const g=card.getAttribute('data-goto'); this.show(g==='fighting'?'fighting':'game'); };
+        card.addEventListener('click',go);
+        card.addEventListener('keydown',e=>{ if(e.code==='Enter'||e.code==='Space'){ e.preventDefault(); go(); } });
+      });
     },
     bindActions(){
       $$('[data-action]').forEach(b=>b.addEventListener('click',()=>this.action(b.getAttribute('data-action'))));
@@ -150,19 +171,54 @@
       else { mn.classList.remove('open'); this._navT=setTimeout(()=>mn.classList.add('hidden'),230); }
     },
     isMobileNavOpen(){ const mn=$('#mobileNav'); return !!(mn&&!mn.classList.contains('hidden')); },
-    show(view){
+    _hashFor(view){
+      const map={games:'#/games',game:'#/games/platformer',fighting:'#/games/fighting',levels:'#/games/platformer/levels',
+        'progress-starbound':'#/progress/platformer','progress-fighting':'#/progress/fighting',
+        home:'#/home',leaderboard:'#/leaderboard',reviews:'#/reviews',profile:'#/profile',settings:'#/settings',credits:'#/credits',about:'#/about'};
+      return map[view]||('#/'+view);
+    },
+    _viewForHash(){
+      const h=String(location.hash||'').toLowerCase();
+      if(h.startsWith('#/games/fighting')) return 'fighting';
+      if(h.startsWith('#/games/platformer')) return (h.includes('levels')?'levels':'game');
+      if(h.startsWith('#/games')) return 'games';
+      if(h.startsWith('#/progress/fighting')) return 'progress-fighting';
+      if(h.startsWith('#/progress')) return 'progress-starbound';
+      const v=h.replace(/^#\/?/,'').split('?')[0];
+      if(['home','game','fighting','games','levels','progress-starbound','progress-fighting','leaderboard','reviews','profile','settings','credits','about'].includes(v)) return v;
+      return null;
+    },
+    _fromHash(){
+      const v=this._viewForHash();
+      if(v&&v!==this.view) this.show(v,true);
+    },
+    show(view,fromHash){
+      // legacy alias: anything still pointing at 'levels' keeps working
+      if(view==='levels') view='levels';
       this.view=view;
-      // gameplay scroll-lock gate: set ONLY while the game view is active,
+      // gameplay scroll-lock gate: set ONLY while a game view is active,
       // so every menu/page keeps normal scrolling (see body.playing CSS).
-      document.body.classList.toggle('playing',view==='game');
+      document.body.classList.toggle('playing',(view==='game'||view==='fighting'));
       $$('.view').forEach(v=>v.classList.remove('active'));
       const el=$('#view-'+view); if(el) el.classList.add('active');
+      else { const fb=$('#view-home'); if(fb) fb.classList.add('active'); this.view='home'; view='home'; }
       $$('.site-nav .nav-link').forEach(n=>n.classList.toggle('active',n.getAttribute('data-nav')===view));
       this.toggleMobileNav(false);
       window.scrollTo({top:0});
+      try{ if(!fromHash){ const h=this._hashFor(view); if(h&&location.hash!==h) history.replaceState(null,'',h); } }catch(e){}
       if(view==='levels') this.renderLevelSelect();
-      if(view==='home') this.refreshHero();
+      if(view==='games'&&global.RS_UI) global.RS_UI.renderGamesGrid();
+      if(view==='progress-starbound'&&global.RS_UI) global.RS_UI.renderPlatProgress();
+      if(view==='progress-fighting'&&global.RS_UI){ global.RS_UI.renderProgress(); }
+      if(view==='home'){ this.refreshHero(); if(global.RS_UI) global.RS_UI.renderHomeProgress(); }
       if(view==='reviews') this.renderReviews();
+      if(view==='fighting'){
+        try{ if(global.RS_Engine&&global.RS_Engine.fitCanvas) global.RS_Engine.fitCanvas(); }catch(e){}
+        if(global.RS_UI&&!global.RS_UI.inGame) global.RS_UI.toMenu();
+        if(global.RS_UI) global.RS_UI.renderSide();
+        // pause platformer while fighting (and vice versa below)
+        try{ if(this.inGame&&global.SP_Engine&&SP_Engine.running&&!this.paused){ SP_Engine.setPaused(true); this.paused=true; this.suspended=true; } }catch(e){}
+      }
       if(view==='game'){
         if(!this.inGame){
           // first visit: land on the in-canvas main menu (NO recursion: _menuOverlay never calls show)
@@ -177,6 +233,8 @@
         if(this.inGame&&global.SP_Engine&&SP_Engine.running&&SP_Engine.level&&!this._endOverlayVisible()&&!this.paused){
           SP_Engine.setPaused(true); this.paused=true; this.suspended=true;
         }
+        // leaving the fighter: freeze its loop too (menus stay live underneath)
+        try{ if(global.RS_UI&&global.RS_UI.inGame&&global.RS_Engine&&!global.RS_Engine.paused){ global.RS_Engine.setPaused(true); const fp=$('#fightPause'); if(fp&&view!=='fighting') fp.classList.remove('hidden'); } }catch(e){}
         // Fullscreen shows ONLY the game wrapper: without exiting, the target
         // page (Settings, Levels, …) would sit underneath it, unreachable and
         // looking frozen on mobile. Exit so the page is visible + touchable.
@@ -355,9 +413,11 @@
     fitTouch(){
       const s=SP_Save.data.settings;
       // Forced ON = always show. Explicit OFF = always hide. Otherwise auto:
-      // touch-capable device AND game view active. Desktop stays untouched.
-      const on=!!(s.touch||(!s.touchOff&&this.isTouchDevice()&&this.view==='game'));
+      // touch-capable device AND a game view active. Desktop stays untouched.
+      const inGameView=(this.view==='game'||this.view==='fighting');
+      const on=!!(s.touch||(!s.touchOff&&this.isTouchDevice()&&inGameView));
       document.body.classList.toggle('show-touch',on);
+      document.body.classList.toggle('show-fight-touch',!!(on&&this.view==='fighting'));
       const hk=$('#hintKbd'), ht=$('#hintTouch');
       if(hk) hk.classList.toggle('hidden',on);
       if(ht) ht.classList.toggle('hidden',!on);
@@ -368,7 +428,8 @@
       const portrait=window.innerHeight>=window.innerWidth;
       if(!portrait) this._chipHide=false; // re-arm when rotated back
       const touchCapable=this.isTouchDevice();
-      const show=!!(touchCapable&&portrait&&this.view==='game'&&this.inGame&&!this._chipHide);
+      const inGameView=(this.view==='game'||this.view==='fighting');
+      const show=!!(touchCapable&&portrait&&inGameView&&((this.view==='game'&&this.inGame)||(this.view==='fighting'))&&!this._chipHide);
       chip.classList.toggle('hidden',!show);
     },
     /* Fullscreen target depends on context (freeze fix): the game view keeps the
@@ -501,7 +562,10 @@
       SP_Save.recalcTotals(); const d=SP_Save.data;
       $('#statProgress').textContent=SP_Save.completedCount()+'/50';
       $('#statCoins').textContent=d.totalCoins;
-      $('#statRelics').textContent=d.totalRelics+'/50';
+      const sf=$('#statFight');
+      if(sf){ try{ const bosses=(global.RS_Save&&global.RS_Save.data.bossesDown.length)||0; sf.textContent=bosses+'/8'; }catch(e){} }
+      const sr=$('#statRelics'); if(sr) sr.textContent=d.totalRelics+'/50';
+      try{ if(global.RS_UI) global.RS_UI.renderHomeProgress(); }catch(e){}
     },
     /* ----- power-up shop (per-level coins, runtime only) ----- */
     renderShop(){
@@ -581,7 +645,7 @@
         let signedIn=false;
         try{ signedIn=!!(window.SP_Profiles&&SP_Profiles.hasAccount&&SP_Profiles.hasAccount()); }catch(_){}
         if(!signedIn){
-          this.confirmDialog({title:'Create Account to Submit Review',message:'You need a STARBOUND account to submit a review.',okText:'Create Account',cancelText:'Not now'}).then(ok=>{
+          this.confirmDialog({title:'Create Account to Submit Review',message:'You need a game account to submit a review.',okText:'Create Account',cancelText:'Not now'}).then(ok=>{
             if(!ok) return;
             try{
               if(window.SP_ProfileUI&&typeof SP_ProfileUI.showCreateAccount==='function') SP_ProfileUI.showCreateAccount();

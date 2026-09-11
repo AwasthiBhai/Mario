@@ -4,6 +4,7 @@
   window.addEventListener('DOMContentLoaded',()=>{
     try{
       SP_Save.load();
+      try{ if(window.RS_Save) RS_Save.load(); }catch(e){}
       // Mobile-safe: audio must NEVER abort boot. If js/audio.js (or the
       // inline guard) failed to provide SP_Audio, skip silently and let the
       // ui/engine fallbacks keep gameplay running without sound.
@@ -26,6 +27,12 @@
       });
       SP_UI.init();
       SP_Intro.init();
+      try{ if(window.RS_UI) RS_UI.init(); }catch(e){ try{console.warn('riftstrike ui skipped:',e);}catch(_){} }
+      // PLAYNOVA: deep-link routing (#/games, #/games/fighting, #/progress/...)
+      try{
+        const v=SP_UI._viewForHash&&SP_UI._viewForHash();
+        if(v) SP_UI.show(v,true); else { SP_UI.refreshHero(); }
+      }catch(e){}
       // preload first level silently so PLAY is instant
       SP_Engine.loadLevel(SP_UI.highestPlayable());
       SP_Engine.start(); SP_Engine.setPaused(true);

@@ -150,7 +150,7 @@ async function run() {
     nid('#revForm').fire('submit');
     await tick();
     assert.strictEqual(nid('#confirmTitle').textContent, 'Create Account to Submit Review');
-    assert.strictEqual(nid('#confirmMsg').textContent, 'You need a STARBOUND account to submit a review.');
+    assert.strictEqual(nid('#confirmMsg').textContent, 'You need a game account to submit a review.');
     assert.strictEqual(nid('#confirmOk').textContent, 'Create Account');
     assert.strictEqual(fetchCalls, 0, 'guest review NOT sent to backend');
     assert.strictEqual(nid('#revName').value, 'Guest Writer', 'draft name kept');

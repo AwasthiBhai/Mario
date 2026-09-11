@@ -9,7 +9,9 @@
     "test": "node test.js",
     "test:auth": "node test-auth.js",
     "test:reset": "node test-gameplay-reset.js",
-    "test:ux": "node test-review-ux.js"
+    "test:ux": "node test-review-ux.js",
+    "test:fighting": "node test-fighting.js",
+    "test:all": "node test.js && node test-auth.js && node test-gameplay-reset.js && node test-review-ux.js && node test-fighting.js"
   },
   "engines": {
     "node": ">=18"

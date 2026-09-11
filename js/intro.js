@@ -29,9 +29,16 @@
       for(let i=0;i<40;i++) this.flies.push({x:Math.random(),y:0.4+Math.random()*0.5,ph:Math.random()*6.28,sp:0.3+Math.random()*0.7});
       document.getElementById('introSkip').addEventListener('click',()=>this.skip());
       document.addEventListener('keydown',e=>{ if(!this.done&&['Space','Enter','Escape'].includes(e.code)){ e.preventDefault(); this.skip(); } });
-      // MANDATE: the cinematic plays on EVERY page load. No already-watched
-      // gate — localStorage / sessionStorage / cookies / prior visits are
-      // never consulted here. finish() still records completion for stats.
+      // PLAYNOVA: returning visitors skip the cinematic (existing introSeen flag).
+      // First visit (or ?intro=1, or Replay Studio Intro) plays the full show.
+      let seen=false, force=false;
+      try{ seen=!!(global.SP_Save&&global.SP_Save.data.introSeen); }catch(e){}
+      try{ force=/(?:\?|&)intro=1/.test(location.search||'')||/(?:\?|&)intro=1/.test(location.hash||''); }catch(e){}
+      if(seen&&!force){ this.done=true; this.awaiting=false;
+        try{ this.el.classList.add('hidden'); this.el.setAttribute('aria-hidden','true'); }catch(e){}
+        try{ if(global.SP_Audio) global.SP_Audio.setState('website'); }catch(err){}
+        return;
+      }
       this.play();
     },
     resize(){ if(this.el&&this.cv){ this.cv.width=this.el.clientWidth||960; this.cv.height=this.el.clientHeight||540; } },

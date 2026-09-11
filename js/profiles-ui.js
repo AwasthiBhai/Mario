@@ -234,9 +234,15 @@
   function syncWorld(doc, stale){
     try{
       if(stale || !doc) return false;
+      let hit=false;
       if(global.SP_Save && typeof global.SP_Save.applyServerReset === 'function'){
-        return !!global.SP_Save.applyServerReset(doc.resetVersion);
+        hit=!!global.SP_Save.applyServerReset(doc.resetVersion)||hit;
       }
+      // PLAYNOVA: RIFTSTRIKE shares the same world epoch — reset together.
+      if(global.RS_Save && typeof global.RS_Save.applyServerReset === 'function'){
+        hit=!!global.RS_Save.applyServerReset(doc.resetVersion)||hit;
+      }
+      return hit;
     }catch(e){}
     return false;
   }
@@ -260,6 +266,9 @@
     try{
       if(global.SP_Save && typeof global.SP_Save.resetAfterWorldWipe === 'function'){
         global.SP_Save.resetAfterWorldWipe();
+      }
+      if(global.RS_Save && typeof global.RS_Save.resetAfterWorldWipe === 'function'){
+        global.RS_Save.resetAfterWorldWipe();
       }
     }catch(e){}
     try{
