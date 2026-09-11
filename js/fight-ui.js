@@ -18,10 +18,15 @@ var U = {
     $$('#fightMenu [data-ftab]').forEach(function(b){
       b.addEventListener('click', function(){ self.tab=b.getAttribute('data-ftab'); self.renderTab(); });
     });
-    ['fightResume','fightPauseTop','fightPauseHud'].forEach(function(id){
-      var b=document.getElementById(id); if(b) b.addEventListener('click', function(){ self.togglePause(false); });
+    // Pause buttons TOGGLE (root cause of the dead ⏸: they used to force-unpause).
+    // Resume forces unpause. Clicking pause can never attack (engine guards paused).
+    ['fightPauseTop','fightPauseHud'].forEach(function(id){
+      var b=document.getElementById(id); if(b) b.addEventListener('click', function(){ self.togglePause(); });
     });
+    var rs=document.getElementById('fightResume'); if(rs) rs.addEventListener('click', function(){ self.togglePause(false); });
     var fr=document.getElementById('fightRestart'); if(fr) fr.addEventListener('click', function(){ self.startLevel(self.wi,self.li); self.togglePause(false); });
+    var fs=document.getElementById('fightSettings'); if(fs) fs.addEventListener('click', function(){ self.togglePause(false); UI().show('settings'); });
+    var fe=document.getElementById('fightExitGames'); if(fe) fe.addEventListener('click', function(){ self.togglePause(false); self.inGame=false; try{ global.RS_Engine.stop(); }catch(e){} UI().show('games'); });
     var fq=document.getElementById('fightQuit'); if(fq) fq.addEventListener('click', function(){ self.toMenu(); });
     var rt=document.getElementById('fightRetry'); if(rt) rt.addEventListener('click', function(){ self.respawn(); });
     var om=document.getElementById('fightOverMenu'); if(om) om.addEventListener('click', function(){ self.toMenu(); });
@@ -47,6 +52,11 @@ var U = {
       });
     }catch(e){}
     this.renderTab(); this.renderGamesGrid();
+    // background tab = instant park: no timers, damage or loop churn while hidden
+    document.addEventListener('visibilitychange',function(){
+      if(document.hidden&&self.inGame){ try{ global.RS_Engine.setPaused(true); }catch(e){}
+        var p=document.getElementById('fightPause'); if(p) p.classList.remove('hidden'); }
+    });
   },
   /* ---------- menu ---------- */
   toMenu:function(){
@@ -59,10 +69,14 @@ var U = {
   hideOverlays:function(){ ['#fightMenu','#fightPause','#fightOver','#fightWin'].forEach(function(s){ var n=$(s); if(n) n.classList.add('hidden'); }); },
   togglePause:function(force){
     if(!this.inGame) return;
+    // never pause over a terminal overlay (death/victory own the screen)
+    var over=$('#fightOver'), win=$('#fightWin');
+    if((over&&!over.classList.contains('hidden'))||(win&&!win.classList.contains('hidden'))) return;
     var p=$('#fightPause'); if(!p) return;
     var want = typeof force==='boolean' ? force : p.classList.contains('hidden');
     try{ global.RS_Engine.setPaused(want); }catch(e){}
     p.classList.toggle('hidden', !want);
+    if(want){ var r=$('#fightResume'); if(r){ try{r.focus();}catch(e){} } }
   },
   startLevel:function(wi,li){
     this.wi=wi; this.li=li; this.inGame=true;
@@ -116,6 +130,7 @@ var U = {
     g('fightHp','❤ '+h.hp+'/'+h.maxHp); g('fightEn','⚡ '+h.en+'/'+h.maxEn);
     g('fightWeapon',h.wicon+' '+h.weapon);
     g('fightDash', h.dashCd>0?('💨 '+h.dashCd.toFixed(1)+'s'):'💨 ready');
+    g('fightObjective', h.objective||'');
     var c=document.getElementById('fightCoins'); if(c) c.textContent=h.coins;
     var s=document.getElementById('fightScore'); if(s) s.textContent=h.score;
     var bb=$('#fightBossBar');
@@ -140,20 +155,25 @@ var U = {
   },
   tabPlay:function(body){
     var self=this, d=SV().data;
-    body.appendChild(el('p','muted','Worlds unlock in order. Finish a level (or fell its warlord) to advance. Boss gates glow red.'));
+    body.appendChild(el('p','muted','Worlds unlock in order. Clear each arena to open its gate — red gates need every required foe defeated. Boss gates glow gold.'));
     var wrap=el('div','rs-worlds');
     D().WORLDS.forEach(function(W,wi){
       var box=el('div','rs-world');
       var locked = wi*3 > d.unlockedWorld*3+d.unlockedLevel;
+      var cleared=[0,1,2].filter(function(li){return SV().isDone(wi,li);}).length;
       box.appendChild(el('h4','',W.icon+' '+(wi+1)+'. '+W.name+(locked?' 🔒':'')));
-      box.appendChild(el('div','muted',W.desc));
+      var sub=el('div','muted',W.desc+' — '+cleared+'/3 cleared');
+      box.appendChild(sub);
       var row=el('div','rs-levels');
       for(var li=0;li<3;li++){
         (function(li){
-          var b=el('button','',(SV().isDone(wi,li)?'✅ ':'▶ ')+(li+1)+(D().levelSpec(wi,li).bosses.length?' ☠':''));
-          if(SV().isDone(wi,li)) b.classList.add('done');
-          b.disabled=!SV().isUnlocked(wi,li);
-          b.setAttribute('aria-label','Play '+W.name+' level '+(li+1));
+          var done=SV().isDone(wi,li), un=SV().isUnlocked(wi,li);
+          var isBoss=D().levelSpec(wi,li).bosses.length>0;
+          var isCur=un&&!done&&(wi*3+li===d.unlockedWorld*3+d.unlockedLevel);
+          var b=el('button',''+(done?'done ':'')+(isBoss?'boss ':'')+(isCur?'current':''),(done?'✓ ':(un?'▶ ':'🔒 '))+(li+1)+(isBoss?' ☠':''));
+          b.disabled=!un;
+          b.setAttribute('aria-label','Play '+W.name+' level '+(li+1)+(isBoss?', boss level':'')+(done?', completed':'')+(isCur?', current':''));
+          if(isCur) b.setAttribute('aria-current','true');
           b.addEventListener('click',function(){ self.startLevel(wi,li); });
           row.appendChild(b);
         })(li);
@@ -161,7 +181,7 @@ var U = {
       box.appendChild(row); wrap.appendChild(box);
     });
     body.appendChild(wrap);
-    var c=el('div','center'); c.style.marginTop='10px';
+    var c=el('div','center'); c.style.marginTop='16px';
     var btn=el('button','btn btn-gold','▶ Continue — '+D().WORLDS[d.unlockedWorld].name+' '+(d.unlockedLevel+1)+'/3');
     btn.addEventListener('click',function(){ self.startLevel(d.unlockedWorld,d.unlockedLevel); });
     c.appendChild(btn); body.appendChild(c);
@@ -324,8 +344,22 @@ var U = {
       var card=el('article','game-card'); card.setAttribute('tabindex','0'); card.setAttribute('role','button');
       card.setAttribute('aria-label','Play '+gd.name);
       var art=el('div','game-card-art '+gd.art); art.setAttribute('aria-hidden','true');
-      art.appendChild(el('span','gc-ico',gd.icon));
-      for(var i=0;i<3;i++) art.appendChild(el('i'));
+      if(gd.id==='platformer'){
+        art.appendChild(el('span','dio-moon'));
+        ['b1','b2','b3'].forEach(function(b){ art.appendChild(el('span','dio-beacon '+b)); });
+        var steps=el('span','dio-steps'); for(var s=0;s<3;s++) steps.appendChild(el('i')); art.appendChild(steps);
+        art.appendChild(el('span','dio-pip','🦊'));
+        art.appendChild(el('span','gc-ico','✦'));
+        art.appendChild(el('span','dio-title','STARBOUND'));
+        ['s1','s2','s3','s4','s5'].forEach(function(s){ art.appendChild(el('i','st '+s)); });
+      } else {
+        art.appendChild(el('span','dio-rift'));
+        art.appendChild(el('span','dio-warlord','👑'));
+        art.appendChild(el('span','dio-blades','🗡'));
+        art.appendChild(el('span','gc-ico','⚔'));
+        art.appendChild(el('span','dio-title','RIFTSTRIKE'));
+        ['e1','e2','e3','e4','e5'].forEach(function(s){ art.appendChild(el('i','em '+s)); });
+      }
       card.appendChild(art);
       var body=el('div','game-card-body');
       var tags=el('div','gc-tags'); tags.appendChild(el('span','',gd.genre)); tags.appendChild(el('span','',gd.diff)); body.appendChild(tags);

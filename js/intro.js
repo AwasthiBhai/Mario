@@ -47,6 +47,7 @@
       cancelAnimationFrame(this.raf); // never stack two cinematic loops
       this.done=false; this.skipped=false; this.t=0; this._loopErr=false;
       this._s1=this._s2=this._s3=this._s4=false;
+      try{ const f=document.getElementById('introLoadFill'); if(f) f.style.width='0%'; }catch(e){}
       document.getElementById('introSkip').classList.remove('hidden');
       try{ global.SP_Audio.init(global.SP_Save?global.SP_Save.data.settings:null); }catch(e){}
       const clickBox=document.getElementById('introClick');
@@ -245,6 +246,8 @@
     },
     timeline(){
       const studio=document.getElementById('introStudio'), logo=document.getElementById('introLogo');
+      const fill=document.getElementById('introLoadFill');
+      if(fill){ try{ fill.style.width=Math.min(100,Math.max(0,(this.t/10)*100)).toFixed(1)+'%'; }catch(e){} }
       if(this.t>1.6&&!this._s1){ this._s1=true; studio.classList.add('show'); try{global.SP_Audio.sfx('sting');}catch(e){} }
       if(this.t>3.8&&!this._s2){ this._s2=true; studio.classList.add('hide'); }
       if(this.t>4.7&&!this._s3){ this._s3=true; studio.classList.add('hidden'); logo.classList.remove('hidden'); }

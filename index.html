@@ -36,6 +36,7 @@
       <div id="introBrandName" class="intro-brand">PLAYNOVA</div>
       <div class="intro-tagline">TWO ADVENTURES · ONE ARCADE</div>
       <div id="introGameLine" class="intro-gameline">✦ STARBOUND ✦ &nbsp;·&nbsp; ⚔ RIFTSTRIKE ⚔</div>
+      <div id="introLoad" class="intro-load" aria-hidden="true"><div id="introLoadFill"></div></div>
     </div>
     <div id="introClick" class="intro-click hidden">
       <div class="click-pulse"></div>
@@ -147,7 +148,14 @@
     <h2>Featured Games <small>pick your adventure</small></h2>
     <div id="featuredGames" class="game-cards">
       <article class="game-card" data-goto="platformer" tabindex="0" role="button" aria-label="Play STARBOUND">
-        <div class="game-card-art art-starbound" aria-hidden="true"><span class="gc-ico">✦</span><span class="gc-fox"></span><i></i><i></i><i></i></div>
+        <div class="game-card-art art-starbound" aria-hidden="true">
+          <span class="dio-moon"></span>
+          <span class="dio-beacon b1"></span><span class="dio-beacon b2"></span><span class="dio-beacon b3"></span>
+          <span class="dio-steps"><i></i><i></i><i></i></span>
+          <span class="dio-pip">🦊</span><span class="gc-ico">✦</span>
+          <span class="dio-title">STARBOUND</span>
+          <i class="st s1"></i><i class="st s2"></i><i class="st s3"></i><i class="st s4"></i><i class="st s5"></i>
+        </div>
         <div class="game-card-body">
           <div class="gc-tags"><span>Platformer</span><span>Cozy-hard</span></div>
           <h3>✦ STARBOUND</h3>
@@ -157,7 +165,13 @@
         </div>
       </article>
       <article class="game-card" data-goto="fighting" tabindex="0" role="button" aria-label="Play RIFTSTRIKE">
-        <div class="game-card-art art-rift" aria-hidden="true"><span class="gc-ico">⚔</span><span class="gc-slash"></span><i></i><i></i><i></i></div>
+        <div class="game-card-art art-rift" aria-hidden="true">
+          <span class="dio-rift"></span>
+          <span class="dio-warlord">👑</span>
+          <span class="dio-blades">🗡</span><span class="gc-ico">⚔</span>
+          <span class="dio-title">RIFTSTRIKE</span>
+          <i class="em e1"></i><i class="em e2"></i><i class="em e3"></i><i class="em e4"></i><i class="em e5"></i>
+        </div>
         <div class="game-card-body">
           <div class="gc-tags"><span>Action / Combat</span><span>Challenging</span></div>
           <h3>⚔ RIFTSTRIKE</h3>
@@ -375,6 +389,7 @@
             <span class="hud-pill hud-sec" id="fightDash">💨 ready</span>
           </div>
           <div class="hud-right">
+            <span class="hud-pill hud-sec" id="fightObjective">⚔ Clear the rift</span>
             <span class="hud-pill">🪙 <b id="fightCoins">0</b></span>
             <span class="hud-pill">★ <b id="fightScore">0</b></span>
             <button id="fightPauseHud" class="hud-pill hud-btn" title="Pause menu" aria-label="Open pause menu">⏸</button>
@@ -398,11 +413,12 @@
           </div>
         </div>
         <div id="fightPause" class="overlay hidden">
-          <div class="panel"><h2>⏸ Paused</h2>
+          <div class="panel" role="dialog" aria-modal="true" aria-label="Game paused"><h2>⏸ GAME PAUSED</h2>
             <button class="btn btn-gold btn-block" id="fightResume">▶ RESUME</button>
             <button class="btn btn-ghost btn-block" id="fightRestart">↻ RESTART LEVEL</button>
-            <button class="btn btn-ghost btn-block" id="fightQuit">⚔ WORLD SELECT</button>
-            <div class="row2"><button class="btn btn-ghost" data-nav="games">GAMES</button><button class="btn btn-ghost" data-nav="home">⌂ HOME</button></div>
+            <button class="btn btn-ghost btn-block" id="fightSettings">⚙ SETTINGS</button>
+            <button class="btn btn-ghost btn-block" id="fightExitGames">🎮 EXIT TO GAMES</button>
+            <div class="row2"><button class="btn btn-ghost" id="fightQuit">WORLD SELECT</button><button class="btn btn-ghost" data-nav="home">⌂ HOME</button></div>
           </div>
         </div>
         <div id="fightOver" class="overlay hidden">

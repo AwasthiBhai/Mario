@@ -109,6 +109,20 @@
     onKeyDown(code){
       if(this._confirmOpen) return; // modal owns Escape; never toggle pause under it
       if(this._capturingKey) return; // key-remap capture owns all keys; never toggle pause/nav
+      // RIFTSTRIKE owns its pause key while its view is active (STARBOUND must
+      // not toggle underneath it).
+      if(this.view==='fighting'&&global.RS_UI){
+        try{
+          const In=global.SP_Input; let isPause=false;
+          if(In&&In.map){ const norm=(In.normCode?In.normCode(code,null):code); let saved=In.map.pause||'Escape';
+            if(In.normCode) saved=In.normCode(saved,null); if(In.storedToCode) saved=In.storedToCode(saved);
+            const isShift=(In.isShiftCode?In.isShiftCode(saved):(saved==='ShiftLeft'||saved==='ShiftRight'));
+            isPause=isShift?(norm==='ShiftLeft'||norm==='ShiftRight'||norm==='Shift'):(norm===saved); }
+          else isPause=(code==='Escape'||code==='KeyP');
+          if(isPause){ if(this.isMobileNavOpen()) this.toggleMobileNav(false); else global.RS_UI.togglePause(); }
+        }catch(e){}
+        return;
+      }
       // Pause uses the SAME saved mapping as gameplay (Input.map.pause),
       // normalized so ShiftLeft/ShiftRight/Esc legacy names all match.
       try{
@@ -129,18 +143,61 @@
       }catch(e){}
     },
     bindNav(){
-      $$('[data-nav]').forEach(b=>{ if(b._navBound) return; b._navBound=true; b.addEventListener('click',()=>{ SP_Audio.init(SP_Save.data.settings); SP_Audio.resume(); SP_Audio.sfx('click'); this.show(b.getAttribute('data-nav')); }); });
-      // PLAYNOVA: nav dropdowns (desktop hover + touch toggle; never hover-only)
+      const coarsePtr=()=>{ try{ return window.matchMedia&&window.matchMedia('(hover: none)').matches; }catch(e){ return false; } };
+      $$('[data-nav]').forEach(b=>{ if(b._navBound) return; b._navBound=true; b.addEventListener('click',(e)=>{
+        // Dropdown triggers: first tap (touch) / first Enter (keyboard) opens
+        // the menu instead of navigating; otherwise follow the parent link.
+        const drop=(b.closest&&b.closest('.nav-drop'))||null;
+        if(drop&&b.classList.contains('nav-drop-btn')){
+          const open=drop.classList.contains('open');
+          if((coarsePtr()||e.detail===0)&&!open){
+            e.preventDefault();
+            drop.classList.add('open'); b.setAttribute('aria-expanded','true');
+            return;
+          }
+        }
+        SP_Audio.init(SP_Save.data.settings); SP_Audio.resume(); SP_Audio.sfx('click'); this.show(b.getAttribute('data-nav'));
+      }); });
+      // PLAYNOVA nav dropdowns: one continuous hover region (CSS bridge, no gap),
+      // click toggles on touch / activates parent on desktop, full keyboard
+      // support, outside-click + Escape close. No timeout hacks.
       $$('.nav-drop').forEach(drop=>{
         const btn=drop.querySelector('.nav-drop-btn');
-        if(!btn) return;
-        drop.addEventListener('mouseenter',()=>{ if(window.matchMedia&&window.matchMedia('(hover:hover)').matches) drop.classList.add('open'); });
-        drop.addEventListener('mouseleave',()=>drop.classList.remove('open'));
-        // Long-press/right affordance: double-click toggles menu without navigating.
-        btn.addEventListener('dblclick',e=>{ e.preventDefault(); e.stopPropagation(); drop.classList.toggle('open'); });
-        drop.querySelectorAll('.nav-menu button').forEach(mi=>mi.addEventListener('click',()=>drop.classList.remove('open')));
-        btn.addEventListener('focus',()=>drop.classList.add('open'));
-        drop.addEventListener('focusout',e=>{ if(!drop.contains(e.relatedTarget)) drop.classList.remove('open'); });
+        if(!btn||btn._dropBound) return; btn._dropBound=true;
+        const items=Array.from(drop.querySelectorAll('.nav-menu button'));
+        const isOpen=()=>drop.classList.contains('open');
+        const setOpen=(open)=>{
+          document.querySelectorAll('.nav-drop.open').forEach(d=>{ if(d!==drop){ d.classList.remove('open'); const b=d.querySelector('.nav-drop-btn'); if(b) b.setAttribute('aria-expanded','false'); } });
+          drop.classList.toggle('open',!!open);
+          btn.setAttribute('aria-expanded',String(!!open));
+        };
+        const coarse=()=>{ try{ return window.matchMedia&&window.matchMedia('(hover: none)').matches; }catch(e){ return false; } };
+        void coarse;
+        // (Parent-button click behavior lives in the [data-nav] handler above:
+        // first touch-tap / first keyboard Enter opens; otherwise it navigates.)
+        drop.addEventListener('mouseenter',()=>{ btn.setAttribute('aria-expanded','true'); });
+        drop.addEventListener('mouseleave',()=>{ if(!btn.matches(':focus-within')) btn.setAttribute('aria-expanded',String(isOpen())); });
+        items.forEach(mi=>mi.addEventListener('click',()=>setOpen(false)));
+        // Keyboard: Down opens + moves in, Esc closes + refocuses trigger.
+        btn.addEventListener('keydown',e=>{
+          if(e.code==='ArrowDown'||e.code==='ArrowUp'){ e.preventDefault(); setOpen(true); const t=e.code==='ArrowDown'?items[0]:items[items.length-1]; if(t) t.focus(); }
+          else if(e.code==='Escape'){ setOpen(false); }
+        });
+        drop.querySelector('.nav-menu').addEventListener('keydown',e=>{
+          const i=items.indexOf(document.activeElement);
+          if(e.code==='Escape'){ e.preventDefault(); setOpen(false); btn.focus(); }
+          else if(e.code==='ArrowDown'){ e.preventDefault(); (items[i+1]||items[0]).focus(); }
+          else if(e.code==='ArrowUp'){ e.preventDefault(); (items[i-1]||items[items.length-1]).focus(); }
+          else if(e.code==='Tab'&&!e.shiftKey&&i===items.length-1){ setOpen(false); }
+          else if(e.code==='Tab'&&e.shiftKey&&i===0){ setOpen(false); }
+        });
+        btn.addEventListener('focus',()=>btn.setAttribute('aria-expanded',String(isOpen())));
+        drop.addEventListener('focusout',e=>{ if(!drop.contains(e.relatedTarget)) setOpen(false); });
+        if(!this._dropGlobal){
+          this._dropGlobal=true;
+          document.addEventListener('pointerdown',e=>{ if(!(e.target.closest&&e.target.closest('.nav-drop'))) document.querySelectorAll('.nav-drop.open').forEach(d=>{ d.classList.remove('open'); const b=d.querySelector('.nav-drop-btn'); if(b) b.setAttribute('aria-expanded','false'); }); },true);
+          document.addEventListener('keydown',e=>{ if(e.code==='Escape') document.querySelectorAll('.nav-drop.open').forEach(d=>{ d.classList.remove('open'); const b=d.querySelector('.nav-drop-btn'); if(b) b.setAttribute('aria-expanded','false'); }); },true);
+        }
       });
       // PLAYNOVA: deep-link hash routes (#/games, #/games/platformer, ...)
       window.addEventListener('hashchange',()=>this._fromHash());
@@ -196,6 +253,8 @@
       // legacy alias: anything still pointing at 'levels' keeps working
       if(view==='levels') view='levels';
       this.view=view;
+      // navigating always parks open menus (a pinned dropdown never survives a view change)
+      try{ document.querySelectorAll('.nav-drop.open').forEach(d=>{ d.classList.remove('open'); const bb=d.querySelector('.nav-drop-btn'); if(bb) bb.setAttribute('aria-expanded','false'); }); }catch(e){}
       // gameplay scroll-lock gate: set ONLY while a game view is active,
       // so every menu/page keeps normal scrolling (see body.playing CSS).
       document.body.classList.toggle('playing',(view==='game'||view==='fighting'));
@@ -215,6 +274,14 @@
       if(view==='fighting'){
         try{ if(global.RS_Engine&&global.RS_Engine.fitCanvas) global.RS_Engine.fitCanvas(); }catch(e){}
         if(global.RS_UI&&!global.RS_UI.inGame) global.RS_UI.toMenu();
+        else if(global.RS_UI&&global.RS_UI.inGame&&global.RS_Engine){
+          // resume a parked session: restart the loop, restore pause state
+          try{
+            var fp2=document.getElementById('fightPause');
+            var parkedPaused=!fp2||!fp2.classList.contains('hidden');
+            global.RS_Engine.start(); global.RS_Engine.setPaused(parkedPaused);
+          }catch(e){}
+        }
         if(global.RS_UI) global.RS_UI.renderSide();
         // pause platformer while fighting (and vice versa below)
         try{ if(this.inGame&&global.SP_Engine&&SP_Engine.running&&!this.paused){ SP_Engine.setPaused(true); this.paused=true; this.suspended=true; } }catch(e){}
@@ -233,8 +300,10 @@
         if(this.inGame&&global.SP_Engine&&SP_Engine.running&&SP_Engine.level&&!this._endOverlayVisible()&&!this.paused){
           SP_Engine.setPaused(true); this.paused=true; this.suspended=true;
         }
-        // leaving the fighter: freeze its loop too (menus stay live underneath)
-        try{ if(global.RS_UI&&global.RS_UI.inGame&&global.RS_Engine&&!global.RS_Engine.paused){ global.RS_Engine.setPaused(true); const fp=$('#fightPause'); if(fp&&view!=='fighting') fp.classList.remove('hidden'); } }catch(e){}
+        // leaving the fighter: park the session (pause + stop the loop; no
+        // simulation, timers, damage or raf churn while away). Returning
+        // restarts cleanly via the branch above.
+        try{ if(global.RS_UI&&global.RS_UI.inGame&&global.RS_Engine){ global.RS_Engine.setPaused(true); try{global.RS_Engine.stop();}catch(ee){} const fp=$('#fightPause'); if(fp&&view!=='fighting') fp.classList.remove('hidden'); } }catch(e){}
         // Fullscreen shows ONLY the game wrapper: without exiting, the target
         // page (Settings, Levels, …) would sit underneath it, unreachable and
         // looking frozen on mobile. Exit so the page is visible + touchable.
